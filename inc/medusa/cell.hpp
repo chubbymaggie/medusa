@@ -18,35 +18,13 @@ MEDUSA_NAMESPACE_BEGIN
 class Medusa_EXPORT Cell
 {
 public:
-  // TODO: Move this class outside Cell scope
-  class Mark
+  enum Type
   {
-  public:
-    typedef std::list<Mark> List;
-
-    enum Type
-    {
-      UnknownType,
-      MnemonicType,
-      RegisterType,
-      ImmediateType,
-      LabelType,
-      KeywordType,
-      OperatorType,
-      CharacterType,
-      StringType
-    };
-
-    Mark(Type Type = UnknownType, size_t Length = 0)
-      : m_Type(Type), m_Length(static_cast<u16>(Length))
-    {}
-
-    u16 GetType(void)   const { return m_Type;   }
-    u16 GetLength(void) const { return m_Length; }
-
-  private:
-    u16 m_Type;
-    u16  m_Length;
+    CellType,         //! Undefined cell.
+    InstructionType,  //! Instruction cell.
+    ValueType,        //! Value cell.
+    CharacterType,    //! Character cell.
+    StringType        //! String cell.
   };
 
   typedef std::shared_ptr<Cell> SPtr;
@@ -57,33 +35,26 @@ public:
    * \param rComment is a the comment for the current cell.
    */
   Cell(
-    CellData::Type Type = CellData::CellType,
-    u16 Size = 0x0,
-    std::string const& rComment = ""
+    u8 Type, u8 SubType,
+    u16 Size = 0x0
     )
-    : m_Comment(rComment)
   {
-    m_spDna = std::make_shared<CellData>(Type, Size);
+    m_spDna = std::make_shared<CellData>(Type, SubType, Size);
   }
 
-  Cell(CellData::SPtr spDna, std::string const& rComment = "") : m_spDna(spDna), m_Comment(rComment) {}
+  Cell(CellData::SPtr spDna) : m_spDna(spDna) {}
 
   virtual ~Cell(void) { }
-
-  //! This method returns the current comment.
-  std::string&          Comment(void) { return m_Comment; }
-
-  //! This method returns the current comment in read-only.
-  std::string const&    GetComment(void) const { return m_Comment; }
-
-  //! This method allows to change the current comment.
-  void                  SetComment(std::string const& rComment) { m_Comment = rComment; }
 
   //! This method returns the size of this cell.
   virtual size_t        GetLength(void) const { return m_spDna->GetLength(); }
 
   //! This method returns the type of this cell.
-  CellData::Type GetType(void) const { return m_spDna->GetType(); }
+  u8 GetType(void) const { return m_spDna->GetType(); }
+  u8 GetSubType(void) const { return m_spDna->GetSubType(); }
+  u8 GetMode(void) const { return m_spDna->GetMode(); }
+  u8& SubType(void) { return m_spDna->SubType(); }
+  u8& Mode(void) { return m_spDna->Mode(); }
 
   //! This method returns the used architecture tag.
   Tag GetArchitectureTag(void) const { return m_spDna->GetArchitectureTag(); }
@@ -94,7 +65,6 @@ public:
 
 protected:
   CellData::SPtr m_spDna;
-  std::string    m_Comment;
 };
 
 MEDUSA_NAMESPACE_END

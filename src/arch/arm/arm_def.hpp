@@ -1,6 +1,20 @@
 #ifndef __ARM_DEF_HPP__
 #define __ARM_DEF_HPP__
 
+enum ARM_Mode
+{
+  ARM_ModeUnknown,
+  ARM_ModeArm,
+  ARM_ModeThumb,
+};
+
+enum ARM_FeatureThumb
+{
+  ARM_Thumb1,
+  ARM_Thumb2,
+  ARM_ThumbEE,
+};
+
 enum ARM_Condition
 {
   ARM_Cond_Eq,

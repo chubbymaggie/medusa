@@ -1,7 +1,9 @@
-set(CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH} ${QT5_CMAKE})
+set(CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH} ${QT5_CMAKE_PATH})
 
 # We require qt5 widgets
 find_package(Qt5Widgets)
+
+find_package(Threads REQUIRED)
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 set(CMAKE_AUTOMOC ON)
@@ -21,57 +23,60 @@ set(RSRCROOT ${CMAKE_SOURCE_DIR}/src/ui/qt)
 
 set (SRC
   ${SRCROOT}/About.cpp
+  ${SRCROOT}/Action.cpp
+  ${SRCROOT}/BasicBlockItem.cpp
+  ${SRCROOT}/CommentDialog.cpp
+  ${SRCROOT}/ConfigureDialog.cpp
   ${SRCROOT}/ControlFlowGraphScene.cpp
   ${SRCROOT}/ControlFlowGraphView.cpp
-  ${SRCROOT}/EdgeItem.cpp
-  ${SRCROOT}/BasicBlockItem.cpp
-  ${SRCROOT}/DisassemblyPrinter.cpp
   ${SRCROOT}/DisassemblyView.cpp
+  ${SRCROOT}/EdgeItem.cpp
   ${SRCROOT}/Goto.cpp
+  ${SRCROOT}/LabelDialog.cpp
   ${SRCROOT}/LabelView.cpp
-  ${SRCROOT}/LoaderChooser.cpp
   ${SRCROOT}/MainWindow.cpp
-  ${SRCROOT}/OpenConfirmation.cpp
+  ${SRCROOT}/MemoryAreaView.cpp
   ${SRCROOT}/Proxy.cpp
-  ${SRCROOT}/SemanticView.cpp
-  ${SRCROOT}/Settings.cpp
-  ${SRCROOT}/SettingsDialog.cpp
   ${SRCROOT}/ScrollbarAddress.cpp
+  ${SRCROOT}/SemanticView.cpp
+  ${SRCROOT}/SettingsDialog.cpp
   ${SRCROOT}/main.cpp
 )
 
 set (INC
   ${INCROOT}/About.hpp
+  ${INCROOT}/Action.hpp
+  ${INCROOT}/BasicBlockItem.hpp
+  ${INCROOT}/CommentDialog.hpp
+  ${INCROOT}/ConfigureDialog.hpp
   ${INCROOT}/ControlFlowGraphScene.hpp
   ${INCROOT}/ControlFlowGraphView.hpp
-  ${INCROOT}/EdgeItem.hpp
-  ${INCROOT}/BasicBlockItem.hpp
-  ${INCROOT}/DisassemblyPrinter.hpp
   ${INCROOT}/DisassemblyView.hpp
+  ${INCROOT}/EdgeItem.hpp
   ${INCROOT}/Goto.hpp
+  ${INCROOT}/LabelDialog.hpp
   ${INCROOT}/LabelView.hpp
-  ${INCROOT}/LoaderChooser.hpp
   ${INCROOT}/MainWindow.hpp
-  ${INCROOT}/OpenConfirmation.hpp
+  ${INCROOT}/MemoryAreaView.hpp
   ${INCROOT}/Proxy.hpp
-  ${INCROOT}/SemanticView.hpp
-  ${INCROOT}/Settings.hpp
-  ${INCROOT}/SettingsDialog.hpp
   ${INCROOT}/ScrollbarAddress.hpp
+  ${INCROOT}/SemanticView.hpp
+  ${INCROOT}/SettingsDialog.hpp
 )
 
 # Qt user interface files
 set(UI
   ${UIROOT}/About.ui
+  ${UIROOT}/Comment.ui
+  ${UIROOT}/ConfigureDialog.ui
   ${UIROOT}/Goto.ui
-  ${UIROOT}/LoaderChooser.ui
+  ${UIROOT}/Label.ui
   ${UIROOT}/MainWindow.ui
-  ${UIROOT}/OpenConfirmation.ui
   ${UIROOT}/SettingsDialog.ui
 )
 
 # Qt resource files
-set(RSRC ${RSRCROOT}/MedusaRsrc.qrc)
+set(RSRC ${RSRCROOT}/Resources.qrc)
 
 qt5_wrap_ui(UI_INC ${UI})
 qt5_add_resources(RSRC_SRC ${RSRC})
@@ -90,6 +95,44 @@ add_executable(qMedusa ${GUI_TYPE}
 )
 
 qt5_use_modules(qMedusa Widgets)
-target_link_libraries(qMedusa Medusa ${OGDF_LIBRARIES})
+target_link_libraries(qMedusa Medusa ${CMAKE_THREAD_LIBS_INIT} ${OGDF_LIBRARIES})
+
+# I can't believe how hard it is to deploy qt5...
+# Inspired from http://pastebin.com/an3dyt51
+# ref: http://qt-project.org/doc/qt-5/windows-deployment.html#creating-the-application-package
+# ref: http://qt-project.org/wiki/Deploy_an_Application_on_Windows
+if (WIN32)
+
+  set(QT5_BIN_PATH ${QT5_CMAKE_PATH}/../../bin)
+  file(TO_CMAKE_PATH ${QT5_BIN_PATH} QT5_BIN_PATH)
+  set(QT5_PPF_PATH ${QT5_CMAKE_PATH}/../../plugins/platforms)
+  file(TO_CMAKE_PATH ${QT5_PPF_PATH} QT5_PPF_PATH)
+
+  list(APPEND QT5_NEEDED_DLL ${QT5_BIN_PATH}/Qt5Gui.dll)
+  list(APPEND QT5_NEEDED_DLL ${QT5_BIN_PATH}/Qt5Core.dll)
+  list(APPEND QT5_NEEDED_DLL ${QT5_BIN_PATH}/Qt5Widgets.dll)
+  if (EXISTS "${QT5_BIN_PATH}/libGLESv2.dll")
+    list(APPEND QT5_NEEDED_DLL ${QT5_BIN_PATH}/libGLESv2.dll)
+  endif()
+  if (EXISTS "${QT5_BIN_PATH}/libEGL.dll")
+    list(APPEND QT5_NEEDED_DLL ${QT5_BIN_PATH}/libEGL.dll)
+  endif()
+
+  file(GLOB icuin_dll ${QT5_BIN_PATH}/icuin*.dll)
+  list(APPEND QT5_NEEDED_DLL ${icuin_dll})
+  file(GLOB icuuc_dll ${QT5_BIN_PATH}/icuuc*.dll)
+  list(APPEND QT5_NEEDED_DLL ${icuuc_dll})
+  file(GLOB icudt_dll ${QT5_BIN_PATH}/icudt*.dll)
+  list(APPEND QT5_NEEDED_DLL ${icudt_dll})
+  file(GLOB d3dcompiler_dll ${QT5_BIN_PATH}/d3dcompiler_*.dll)
+  list(APPEND QT5_NEEDED_DLL ${d3dcompiler_dll})
+
+  foreach (lib ${QT5_NEEDED_DLL})
+    install(FILES ${lib} DESTINATION .)
+  endforeach ()
+
+  install(FILES ${QT5_PPF_PATH}/qwindows.dll DESTINATION platforms)
+
+endif ()
 
 install(TARGETS qMedusa RUNTIME DESTINATION .)

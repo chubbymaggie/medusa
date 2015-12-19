@@ -5,6 +5,7 @@
 #include "medusa/binary_stream.hpp"
 #include "medusa/types.hpp"
 #include "medusa/export.hpp"
+#include "medusa/task.hpp"
 #include "medusa/architecture.hpp"
 #include "medusa/loader.hpp"
 #include "medusa/os.hpp"
@@ -16,13 +17,18 @@
 #include <vector>
 #include <iostream>
 #include <iomanip>
+#include <string>
+#include <tuple>
 
 #include <boost/thread/mutex.hpp>
 #include <boost/shared_ptr.hpp>
+#include <boost/filesystem/path.hpp>
 
 #ifdef _MSC_VER
 # pragma warning(disable: 4251)
 #endif
+
+namespace fs = boost::filesystem;
 
 MEDUSA_NAMESPACE_BEGIN
 
@@ -31,66 +37,75 @@ class Medusa_EXPORT Medusa
 {
 public:
                                   Medusa(void);
-                                  Medusa(std::wstring const& rFilePath);
                                  ~Medusa(void);
 
-                                  /*! This method opens a file for being disassembled.
-                                   * It returns nothing but could throws exception @see Exception
-                                   * \param rFilePath is the path to the file.
-                                   */
-  void                            Open(std::wstring const& rFilePath);
+  static std::string              GetVersion(void);
 
-                                  //! This method returns true if a file is opened, otherwise it returns false.
-  bool                            IsOpened(void) const;
+  void                            AddTask(Task* pTask);
+  void                            WaitForTasks(void);
 
-                                  //! This method closes the current disassembled file and cleans all resources.
-  void                            Close(void);
+  bool                            Start(
+    BinaryStream::SharedPtr spBinaryStream,
+    Database::SharedPtr spDatabase,
+    Loader::SharedPtr spLoader,
+    Architecture::VectorSharedPtr spArchitectures,
+    OperatingSystem::SharedPtr spOperatingSystem);
 
-                                  //! This methods loads all modules.
-  void                            LoadModules(std::wstring const& rModulesPath);
+  typedef std::tuple<std::string, std::string> Filter;
+  typedef std::function<bool (
+    fs::path& rDatabasePath,
+    std::list<Filter> const& rExtensionFilter
+    )> AskDatabaseFunctionType;
 
-  void                            ConfigureEndianness(Architecture::SharedPtr spArch);
+  typedef std::function<bool (
+    BinaryStream::SharedPtr spBinStrm,
+    Database::SharedPtr& rspDatabase,
+    Loader::SharedPtr& rspLoader,
+    Architecture::VectorSharedPtr& rspArchitectures,
+    OperatingSystem::SharedPtr& rspOperatingSystem
+    )> ModuleSelectorFunctionType;
 
-  void                            Start(Loader::SharedPtr spLdr, Architecture::SharedPtr spArch, OperatingSystem::SharedPtr spOs);
-  void                            StartAsync(Loader::SharedPtr spLdr, Architecture::SharedPtr spArch, OperatingSystem::SharedPtr spOs);
+  typedef std::function<bool (void)> FunctionType;
 
-  void                            Disassemble(Architecture::SharedPtr spArch, Address const& rAddr);
-  void                            DisassembleAsync(Address const& rAddr);
-  void                            DisassembleAsync(Architecture::SharedPtr spArch, Address const& rAddr);
+  bool                            NewDocument(
+    fs::path const& rFilePath,
+    AskDatabaseFunctionType AskDatabase,
+    ModuleSelectorFunctionType ModuleSelector,
+    FunctionType BeforeStart,
+    FunctionType AfterStart);
+  bool                            OpenDocument(AskDatabaseFunctionType AskDatabase);
+  bool                            CloseDocument(void);
+
+                                  //! This method returns the current document.
+  Document&                       GetDocument(void)       { return m_Document; }
+  Document const&                 GetDocument(void) const { return m_Document; }
 
                                   /*! This method starts the analyze.
                                    * \param spArch is the selected Architecture.
                                    * \param rAddr is the start address of disassembling.
+                                   * \param Mode allows to tell which architecture mode should be used
                                    */
-  void                            Analyze(Architecture::SharedPtr spArch, Address const& rAddr);
-  void                            AnalyzeAsync(Address const& rAddr);
-  void                            AnalyzeAsync(Architecture::SharedPtr spArch, Address const& rAddr);
+  void                            Analyze(Address const& rAddr, Architecture::SharedPtr spArch = nullptr, u8 Mode = 0);
 
                                   /*! This method builds a control flow graph from an address.
                                    * \param rAddr is the start address.
                                    * \param rCfg is the filled control flow graph.
                                    */
-  bool                            BuildControlFlowGraph(Address const& rAddr, ControlFlowGraph& rCfg);
+  bool                            BuildControlFlowGraph(Address const& rAddr, ControlFlowGraph& rCfg) const;
 
   Cell::SPtr                      GetCell(Address const& rAddr);
   Cell::SPtr const                GetCell(Address const& rAddr) const;
   bool FormatCell(
     Address       const& rAddress,
     Cell          const& rCell,
-    std::string        & rStrCell,
-    Cell::Mark::List   & rMarks) const;
+    PrintData          & rPrintData) const;
 
   MultiCell*                      GetMultiCell(Address const& rAddr);
   MultiCell const*                GetMultiCell(Address const& rAddr) const;
   bool FormatMultiCell(
     Address       const& rAddress,
     MultiCell     const& rMultiCell,
-    std::string        & rStrMultiCell,
-    Cell::Mark::List   & rMarks) const;
-
-                                  //! This method returns the current document.
-  Document&                       GetDocument(void)       { return m_Document; }
-  Document const&                 GetDocument(void) const { return m_Document; }
+    PrintData          & rPrintData) const;
 
                                   //! This method makes a fully filled Address if possible. @see Address
   Address                         MakeAddress(TOffset Offset);
@@ -110,14 +125,13 @@ public:
   void BacktrackOperand(Address const& rStartAddress, Analyzer::Tracker& rTracker);
 
 private:
-  FileBinaryStream                 m_FileBinStrm;
+  TaskManager                      m_TaskManager;
   Document                         m_Document;
 
-  Analyzer                         m_Analyzer; /* don't shorten this word :) */
+  Analyzer                         m_Analyzer;
 
   typedef boost::mutex             MutexType;
   mutable MutexType                m_Mutex;
-  Database::SharedPtr              m_CurrentDatase;
 };
 
 MEDUSA_NAMESPACE_END

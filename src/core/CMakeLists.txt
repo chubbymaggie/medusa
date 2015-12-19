@@ -13,11 +13,13 @@ set(SRC
   ${INCROOT}/cell.hpp
   ${INCROOT}/cell_action.hpp
   ${INCROOT}/cell_data.hpp
+  ${INCROOT}/cell_text.hpp
   ${INCROOT}/character.hpp
   ${INCROOT}/configuration.hpp
   ${INCROOT}/control_flow_graph.hpp
   ${INCROOT}/context.hpp
   ${INCROOT}/database.hpp
+  ${INCROOT}/detail.hpp
   ${INCROOT}/disassembly_view.hpp
   ${INCROOT}/document.hpp
   ${INCROOT}/emulation.hpp
@@ -43,10 +45,12 @@ set(SRC
   ${INCROOT}/operand.hpp
   ${INCROOT}/os.hpp
   ${INCROOT}/plugin.hpp
-  ${INCROOT}/printer.hpp
   ${INCROOT}/string.hpp
-  ${INCROOT}/struct.hpp
+  ${INCROOT}/structure.hpp
+  ${INCROOT}/task.hpp
   ${INCROOT}/types.hpp
+  ${INCROOT}/user_configuration.hpp
+  ${INCROOT}/util.hpp
   ${INCROOT}/value.hpp
   ${INCROOT}/view.hpp
   ${INCROOT}/xref.hpp
@@ -59,11 +63,13 @@ set(SRC
   ${SRCROOT}/cell.cpp
   ${SRCROOT}/cell_action.cpp
   ${SRCROOT}/cell_data.cpp
+  ${SRCROOT}/cell_text.cpp
   ${SRCROOT}/character.cpp
   ${SRCROOT}/configuration.cpp
   ${SRCROOT}/control_flow_graph.cpp
   ${SRCROOT}/context.cpp
   ${SRCROOT}/database.cpp
+  ${SRCROOT}/detail.cpp
   ${SRCROOT}/disassembly_view.cpp
   ${SRCROOT}/document.cpp
   ${SRCROOT}/emulation.cpp
@@ -84,27 +90,29 @@ set(SRC
   ${SRCROOT}/multicell.cpp
   ${SRCROOT}/operand.cpp
   ${SRCROOT}/os.cpp
-  ${SRCROOT}/printer.cpp
   ${SRCROOT}/string.cpp
-  ${SRCROOT}/struct.cpp
+  ${SRCROOT}/structure.cpp
+  ${SRCROOT}/task.cpp
+  ${SRCROOT}/user_configuration.cpp
+  ${SRCROOT}/util.cpp
   ${SRCROOT}/value.cpp
   ${SRCROOT}/view.cpp
   ${SRCROOT}/xref.cpp
   )
 
-if(WIN32)
+if (WIN32)
   set(SRC
     ${SRC}
     ${SRCROOT}/windows_binary_stream.cpp
     ${SRCROOT}/windows_module.cpp
     )
-else()
+else ()
   set(SRC
     ${SRC}
     ${SRCROOT}/unix_binary_stream.cpp
     ${SRCROOT}/unix_module.cpp
     )
-endif()
+endif ()
 
 # define libMedusa architecture target
 add_library(Medusa SHARED ${SRC})
@@ -117,10 +125,11 @@ if (DL_LIBRARY)
   target_link_libraries(Medusa dl)
 endif ()
 
-if(WIN32)
+if (WIN32)
   install(TARGETS Medusa RUNTIME DESTINATION .)
+  file(GLOB boost_system_dll     "${Boost_LIBRARY_DIRS}/boost_system-*-mt-1*.dll")
   file(GLOB boost_filesystem_dll "${Boost_LIBRARY_DIRS}/boost_filesystem-*-mt-1*.dll")
-  install(FILES "${boost_filesystem_dll}" DESTINATION .)
-else()
+  install(FILES "${boost_system_dll}" "${boost_filesystem_dll}" DESTINATION .)
+else ()
   install(TARGETS Medusa LIBRARY DESTINATION .)
-endif()
+endif ()

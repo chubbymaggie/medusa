@@ -3,8 +3,8 @@
 
 #include <medusa/document.hpp>
 #include <medusa/loader.hpp>
+#include <medusa/log.hpp>
 
-#include "pe_interpreter.hpp"
 #include "pe.hpp"
 
 #if defined(_WIN32) || defined(WIN32)
@@ -19,35 +19,32 @@
 
 MEDUSA_NAMESPACE_USE
 
-class                       PeLoader : public Loader
+class PeLoader : public Loader
 {
 public:
-                                  PeLoader(Document& rDoc);
-  virtual                        ~PeLoader(void) {}
+  PeLoader(void);
 
-  virtual std::string             GetName(void) const;
-  virtual bool                    IsSupported(void) { return m_IsValid; }
-  virtual void                    Map(void);
-  virtual void                    Translate(Address const& rVirtAddr, TOffset& rOffset);
-  virtual Address                 GetEntryPoint(void);
-  virtual Architecture::SharedPtr GetMainArchitecture(Architecture::VectorSharedPtr const& rArchitectures);
-  virtual void                    Configure(Configuration& rCfg);
+  virtual std::string GetName(void) const;
+  virtual u8          GetDepth(void) const { return 2; /* IMAGE_DOS_HEADER is depth 1 */ }
+  virtual bool        IsCompatible(BinaryStream const& rBinStrm);
+  virtual void        Map(Document& rDoc, Architecture::VectorSharedPtr const& rArchs);
+  virtual void        FilterAndConfigureArchitectures(Architecture::VectorSharedPtr& rArchs) const;
 
 private:
-  u8 GetWordSize(void) const     { return m_WordSize; }
+  u16 m_Machine;
+  u16 m_Magic;
 
-  Document&                 m_rDoc;
-  bool                      m_IsValid;
-  u16                       m_Machine;
-  u8                        m_WordSize;
+  bool _FindArchitectureTagAndModeByMachine(
+      Architecture::VectorSharedPtr const& rArchs,
+      Tag& rArchTag, u8& rArchMode
+      ) const;
 
-  union
-  {
-    PeInterpreter<u32>* _32;
-    PeInterpreter<u64>* _64;
-  }                         m_Pe;
+  template<int bit> void _Map(Document& rDoc, Architecture::VectorSharedPtr const& rArchs);
+  template<int bit> void _MapSections(Document& rDoc, Architecture::VectorSharedPtr const& rArchs, u64 ImageBase, u64 SectionHeadersOffset, u16 NumberOfSection);
+  template<int bit> void _ResolveImports(Document& rDoc, u64 ImageBase, u64 ImportDirectoryRva, u64 ImportAddressTableRva);
+  template<int bit> void _ResolveExports(Document& rDoc, u64 ImageBase, u64 ExportDirectoryRva);
 };
 
-extern "C" LDR_PE_EXPORT Loader* GetLoader(Document& rDoc);
+extern "C" LDR_PE_EXPORT Loader* GetLoader(void);
 
 #endif

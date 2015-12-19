@@ -1,5 +1,67 @@
 #include "x86_architecture.hpp"
 
+X86Architecture::X86Architecture(void)
+  : Architecture(MEDUSA_ARCH_TAG('x','8','6'))
+  , m_CpuInfo()
+{
+  Configuration::Enum ArchMdl;
+  ArchMdl.push_back(std::make_pair("latest", X86_Arch_Latest));
+  m_CfgMdl.InsertEnum("Architecture", ArchMdl, X86_Arch_Latest);
+
+  Configuration::Enum VendorMdl;
+  VendorMdl.push_back(std::make_pair("AMD", X86_ProcType_AMD));
+  VendorMdl.push_back(std::make_pair("Intel", X86_ProcType_INTEL));
+  VendorMdl.push_back(std::make_pair("IA64", X86_ProcType_IA64));
+  VendorMdl.push_back(std::make_pair("Cyrix", X86_ProcType_CYRIX));
+  VendorMdl.push_back(std::make_pair("IIT", X86_ProcType_IIT));
+  m_CfgMdl.InsertEnum("Vendor", VendorMdl, X86_ProcType_INTEL);
+
+  /* XXX: We don't have enough information about instructions origin to offer this option. */
+  //Configuration::Enum FeatInt;
+  //FeatInt.push_back(std::make_pair("8086",  X86_FeatInt_8086 ));
+  //FeatInt.push_back(std::make_pair("80186", X86_FeatInt_80186));
+  //FeatInt.push_back(std::make_pair("80286", X86_FeatInt_80286));
+  //FeatInt.push_back(std::make_pair("80386", X86_FeatInt_80386));
+  //FeatInt.push_back(std::make_pair("80486", X86_FeatInt_80486));
+  //FeatInt.push_back(std::make_pair("80586", X86_FeatInt_80586));
+  //FeatInt.push_back(std::make_pair("80686", X86_FeatInt_80686));
+  //FeatInt.push_back(std::make_pair("80786", X86_FeatInt_80786));
+  //FeatInt.push_back(std::make_pair("sse",   X86_FeatInt_Sse  ));
+  //FeatInt.push_back(std::make_pair("sse2",  X86_FeatInt_Sse2 ));
+  //FeatInt.push_back(std::make_pair("sse3",  X86_FeatInt_Sse3 ));
+  //FeatInt.push_back(std::make_pair("svm",   X86_FeatInt_Svm  ));
+  //FeatInt.push_back(std::make_pair("vmx",   X86_FeatInt_Vmx  ));
+  //FeatInt.push_back(std::make_pair("sse4a", X86_FeatInt_Sse4a));
+  //m_CfgMdl.InsertEnum("Integer feature", FeatInt, X86_FeatInt_Sse4a);
+
+  //Configuration::Enum FeatFp;
+  //FeatFp.push_back(std::make_pair("8087",  X86_FeatFp_8087 ));
+  //FeatFp.push_back(std::make_pair("80287", X86_FeatFp_80287));
+  //FeatFp.push_back(std::make_pair("80387", X86_FeatFp_80387));
+  //FeatFp.push_back(std::make_pair("80487", X86_FeatFp_80487));
+  //FeatFp.push_back(std::make_pair("80587", X86_FeatFp_80587));
+  //m_CfgMdl.InsertEnum("Floating-point feature", FeatFp, X86_FeatFp_80587);
+
+  //Configuration::Enum FeatSimd;
+  //FeatSimd.push_back(std::make_pair("mmx",     X86_FeatSimd_Mmx    ));
+  //FeatSimd.push_back(std::make_pair("mmx+",    X86_FeatSimd_MmxPlus));
+  //FeatSimd.push_back(std::make_pair("emmx",    X86_FeatSimd_Emmx   ));
+  //FeatSimd.push_back(std::make_pair("3dnow!",  X86_FeatSimd_3dNow  ));
+  //FeatSimd.push_back(std::make_pair("sse",     X86_FeatSimd_Sse    ));
+  //FeatSimd.push_back(std::make_pair("sse 2",   X86_FeatSimd_Sse2   ));
+  //FeatSimd.push_back(std::make_pair("sse 3",   X86_FeatSimd_Sse3   ));
+  //FeatSimd.push_back(std::make_pair("ssse 3",  X86_FeatSimd_Ssse3  ));
+  //FeatSimd.push_back(std::make_pair("sse 4.1", X86_FeatSimd_Sse41  ));
+  //FeatSimd.push_back(std::make_pair("sse 4a",  X86_FeatSimd_Sse4a  ));
+  //FeatSimd.push_back(std::make_pair("sse 4.2", X86_FeatSimd_Sse42  ));
+  //FeatSimd.push_back(std::make_pair("aes",     X86_FeatSimd_Aes    ));
+  //FeatSimd.push_back(std::make_pair("avx",     X86_FeatSimd_Avx    ));
+  //m_CfgMdl.InsertEnum("SIMD feature", FeatSimd, X86_FeatSimd_Avx);
+
+  //m_CfgMdl.InsertBool("undocumented instruction", true);
+}
+
+
 char const* X86Architecture::X86CpuInformation::ConvertIdentifierToName(u32 Id) const
 {
   switch (Id)
@@ -79,14 +141,14 @@ u32 X86Architecture::X86CpuInformation::ConvertNameToIdentifier(std::string cons
   return itId->second;
 }
 
-u32 X86Architecture::X86CpuInformation::GetRegisterByType(CpuInformation::Type RegType) const
+u32 X86Architecture::X86CpuInformation::GetRegisterByType(CpuInformation::Type RegType, u8 Mode) const
 {
   static const u32 Register16[] = { X86_Reg_Sp,  X86_Reg_Bp,  X86_Reg_Ip,  X86_Reg_Flags,  X86_Reg_Ax,  X86_Reg_Cx  };
   static const u32 Register32[] = { X86_Reg_Esp, X86_Reg_Ebp, X86_Reg_Eip, X86_Reg_Eflags, X86_Reg_Eax, X86_Reg_Ecx };
   static const u32 Register64[] = { X86_Reg_Rsp, X86_Reg_Rbp, X86_Reg_Rip, X86_Reg_Rflags, X86_Reg_Rax, X86_Reg_Rcx };
 
   if (RegType < InvalidRegister)
-    switch (m_rCfg.Get("Bit"))
+    switch (Mode)
   {
     case X86_Bit_16: return Register16[RegType];
     case X86_Bit_32: return Register32[RegType];
@@ -197,7 +259,7 @@ bool X86Architecture::X86CpuInformation::IsRegisterAliased(u32 Id0, u32 Id1) con
 
 Expression* X86Architecture::UpdateFlags(Instruction& rInsn, Expression* pResultExpr)
 {
-  u32 RegFlags = m_CpuInfo.GetRegisterByType(CpuInformation::FlagRegister);
+  u32 RegFlags = m_CpuInfo.GetRegisterByType(CpuInformation::FlagRegister, rInsn.GetMode());
   u32 RegFlagsSize = m_CpuInfo.GetSizeOfRegisterInBit(RegFlags);
   assert(RegFlags != 0 && "Invalid flags");
 
@@ -212,33 +274,33 @@ Expression* X86Architecture::UpdateFlags(Instruction& rInsn, Expression* pResult
   {
   case X86_Opcode_Inc: case X86_Opcode_Add:
     FlagExprs.push_back(new IfElseConditionExpression(IfElseConditionExpression::CondUlt,
-      pResultExpr->Clone(), rInsn.Operand(0)->GetSemantic(&m_CpuInfo, InsnLen),
+      pResultExpr->Clone(), rInsn.Operand(0)->GetSemantic(rInsn.GetMode(), &m_CpuInfo, InsnLen),
       SetFlags(rInsn, X86_FlCf), ResetFlags(rInsn, X86_FlCf)));
     break;
 
   case X86_Opcode_Adc:
     FlagExprs.push_back(new IfElseConditionExpression(IfElseConditionExpression::CondUlt,
       pResultExpr->Clone(),
-      new OperationExpression(OperationExpression::OpAdd, rInsn.Operand(0)->GetSemantic(&m_CpuInfo, InsnLen), ExtractFlag(rInsn, X86_FlCf)),
+      new OperationExpression(OperationExpression::OpAdd, rInsn.Operand(0)->GetSemantic(rInsn.GetMode(), &m_CpuInfo, InsnLen), ExtractFlag(rInsn, X86_FlCf)),
       SetFlags(rInsn, X86_FlCf), ResetFlags(rInsn, X86_FlCf)));
     break;
 
   case X86_Opcode_Dec:
     FlagExprs.push_back(new IfElseConditionExpression(IfElseConditionExpression::CondUlt,
-      rInsn.Operand(0)->GetSemantic(&m_CpuInfo, InsnLen), new ConstantExpression(Bit, 1),
+      rInsn.Operand(0)->GetSemantic(rInsn.GetMode(), &m_CpuInfo, InsnLen), new ConstantExpression(Bit, 1),
       SetFlags(rInsn, X86_FlCf), ResetFlags(rInsn, X86_FlCf)));
     break;
 
   case X86_Opcode_Sub: case X86_Opcode_Cmp:
     FlagExprs.push_back(new IfElseConditionExpression(IfElseConditionExpression::CondUlt,
-      rInsn.Operand(0)->GetSemantic(&m_CpuInfo, InsnLen), rInsn.Operand(1)->GetSemantic(&m_CpuInfo, InsnLen),
+      rInsn.Operand(0)->GetSemantic(rInsn.GetMode(), &m_CpuInfo, InsnLen), rInsn.Operand(1)->GetSemantic(rInsn.GetMode(), &m_CpuInfo, InsnLen),
       SetFlags(rInsn, X86_FlCf), ResetFlags(rInsn, X86_FlCf)));
     break;
 
   case X86_Opcode_Sbb:
     FlagExprs.push_back(new IfElseConditionExpression(IfElseConditionExpression::CondUlt,
       pResultExpr->Clone(),
-      new OperationExpression(OperationExpression::OpSub, rInsn.Operand(0)->GetSemantic(&m_CpuInfo, InsnLen), ExtractFlag(rInsn, X86_FlCf)),
+      new OperationExpression(OperationExpression::OpSub, rInsn.Operand(0)->GetSemantic(rInsn.GetMode(), &m_CpuInfo, InsnLen), ExtractFlag(rInsn, X86_FlCf)),
       SetFlags(rInsn, X86_FlCf), ResetFlags(rInsn, X86_FlCf)));
     break;
   }
@@ -257,7 +319,7 @@ Expression* X86Architecture::UpdateFlags(Instruction& rInsn, Expression* pResult
   {
     FlagExprs.push_back(new IfElseConditionExpression(ConditionExpression::CondEq,
       new OperationExpression(OperationExpression::OpAnd, pResultExpr->Clone(), new ConstantExpression(Bit, 1 << (Bit - 1))),
-      new ConstantExpression(Bit, 0x0),
+      new ConstantExpression(Bit, 1 << (Bit - 1)),
       SetFlags(rInsn, X86_FlSf), ResetFlags(rInsn, X86_FlSf)));
   }
 
@@ -270,7 +332,7 @@ Expression* X86Architecture::UpdateFlags(Instruction& rInsn, Expression* pResult
 
 OperationExpression* X86Architecture::SetFlags(Instruction& rInsn, u32 Flags)
 {
-  u32 RegFlags = m_CpuInfo.GetRegisterByType(CpuInformation::FlagRegister);
+  u32 RegFlags = m_CpuInfo.GetRegisterByType(CpuInformation::FlagRegister, rInsn.GetMode());
   u32 RegFlagsSize = m_CpuInfo.GetSizeOfRegisterInBit(RegFlags);
   assert(RegFlags != 0 && "Invalid flags");
 
@@ -279,12 +341,12 @@ OperationExpression* X86Architecture::SetFlags(Instruction& rInsn, u32 Flags)
     /**/new IdentifierExpression(RegFlags, &m_CpuInfo),
     /**/new OperationExpression(OperationExpression::OpOr,
     /****/new IdentifierExpression(RegFlags, &m_CpuInfo),
-    /****/new ConstantExpression(RegFlagsSize, 1 << FlagsMask)));
+    /****/new ConstantExpression(RegFlagsSize, FlagsMask)));
 }
 
 OperationExpression* X86Architecture::ResetFlags(Instruction& rInsn, u32 Flags)
 {
-  u32 RegFlags = m_CpuInfo.GetRegisterByType(CpuInformation::FlagRegister);
+  u32 RegFlags = m_CpuInfo.GetRegisterByType(CpuInformation::FlagRegister, rInsn.GetMode());
   u32 RegFlagsSize = m_CpuInfo.GetSizeOfRegisterInBit(RegFlags);
   assert(RegFlags != 0 && "Invalid flags");
 
@@ -293,12 +355,12 @@ OperationExpression* X86Architecture::ResetFlags(Instruction& rInsn, u32 Flags)
     /**/new IdentifierExpression(RegFlags, &m_CpuInfo),
     /**/new OperationExpression(OperationExpression::OpAnd,
     /****/new IdentifierExpression(RegFlags, &m_CpuInfo),
-    /****/new ConstantExpression(RegFlagsSize, ~(1 << FlagsMask))));
+    /****/new ConstantExpression(RegFlagsSize, ~FlagsMask)));
 }
 
 ConditionExpression* X86Architecture::TestFlags(Instruction& rInsn, u32 Flags)
 {
-  u32 RegFlags = m_CpuInfo.GetRegisterByType(CpuInformation::FlagRegister);
+  u32 RegFlags = m_CpuInfo.GetRegisterByType(CpuInformation::FlagRegister, rInsn.GetMode());
   u32 RegFlagsSize = m_CpuInfo.GetSizeOfRegisterInBit(RegFlags);
   assert(RegFlags != 0 && "Invalid flags");
 
@@ -312,7 +374,7 @@ ConditionExpression* X86Architecture::TestFlags(Instruction& rInsn, u32 Flags)
 
 ConditionExpression* X86Architecture::TestNotFlags(Instruction& rInsn, u32 Flags)
 {
-  u32 RegFlags = m_CpuInfo.GetRegisterByType(CpuInformation::FlagRegister);
+  u32 RegFlags = m_CpuInfo.GetRegisterByType(CpuInformation::FlagRegister, rInsn.GetMode());
   u32 RegFlagsSize = m_CpuInfo.GetSizeOfRegisterInBit(RegFlags);
   assert(RegFlags != 0 && "Invalid flags");
 
@@ -326,7 +388,7 @@ ConditionExpression* X86Architecture::TestNotFlags(Instruction& rInsn, u32 Flags
 
 OperationExpression* X86Architecture::ExtractFlag(Instruction& rInsn, u32 Flag)
 {
-  u32 RegFlags = m_CpuInfo.GetRegisterByType(CpuInformation::FlagRegister);
+  u32 RegFlags = m_CpuInfo.GetRegisterByType(CpuInformation::FlagRegister, rInsn.GetMode());
   u32 RegFlagsSize = m_CpuInfo.GetSizeOfRegisterInBit(RegFlags);
   assert(RegFlags != 0 && "Invalid flags");
 
@@ -350,66 +412,11 @@ OperationExpression* X86Architecture::ExtractFlag(Instruction& rInsn, u32 Flag)
       /**/new ConstantExpression(RegFlagsSize, 1));
 }
 
-bool X86Architecture::Disassemble(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn)
+bool X86Architecture::Disassemble(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode)
 {
   u8 Opcode;
   rBinStrm.Read(Offset, Opcode);
-  bool Res = (this->*m_Table_1[Opcode])(rBinStrm, Offset + 1, rInsn);
+  bool Res = (this->*m_Table_1[Opcode])(rBinStrm, Offset + 1, rInsn, Mode);
   rInsn.SetName(m_Mnemonic[rInsn.GetOpcode()]);
   return Res;
-}
-
-void X86Architecture::FillConfigurationModel(ConfigurationModel& rCfgMdl)
-{
-  Architecture::FillConfigurationModel(rCfgMdl);
-
-  ConfigurationModel::Enum Bit;
-  Bit.push_back(std::make_pair("16-bit", X86_Bit_16));
-  Bit.push_back(std::make_pair("32-bit", X86_Bit_32));
-  Bit.push_back(std::make_pair("64-bit", X86_Bit_64));
-  rCfgMdl.Set("Bit", Bit, X86_Bit_32);
-
-  /* XXX: We don't have enough information about instructions origin to offer this option. */
-  //ConfigurationModel::Enum FeatInt;
-  //FeatInt.push_back(std::make_pair("8086",  X86_FeatInt_8086 ));
-  //FeatInt.push_back(std::make_pair("80186", X86_FeatInt_80186));
-  //FeatInt.push_back(std::make_pair("80286", X86_FeatInt_80286));
-  //FeatInt.push_back(std::make_pair("80386", X86_FeatInt_80386));
-  //FeatInt.push_back(std::make_pair("80486", X86_FeatInt_80486));
-  //FeatInt.push_back(std::make_pair("80586", X86_FeatInt_80586));
-  //FeatInt.push_back(std::make_pair("80686", X86_FeatInt_80686));
-  //FeatInt.push_back(std::make_pair("80786", X86_FeatInt_80786));
-  //FeatInt.push_back(std::make_pair("sse",   X86_FeatInt_Sse  ));
-  //FeatInt.push_back(std::make_pair("sse2",  X86_FeatInt_Sse2 ));
-  //FeatInt.push_back(std::make_pair("sse3",  X86_FeatInt_Sse3 ));
-  //FeatInt.push_back(std::make_pair("svm",   X86_FeatInt_Svm  ));
-  //FeatInt.push_back(std::make_pair("vmx",   X86_FeatInt_Vmx  ));
-  //FeatInt.push_back(std::make_pair("sse4a", X86_FeatInt_Sse4a));
-  //rCfgMdl.Set("Integer feature", FeatInt, X86_FeatInt_Sse4a);
-
-  //ConfigurationModel::Enum FeatFp;
-  //FeatFp.push_back(std::make_pair("8087",  X86_FeatFp_8087 ));
-  //FeatFp.push_back(std::make_pair("80287", X86_FeatFp_80287));
-  //FeatFp.push_back(std::make_pair("80387", X86_FeatFp_80387));
-  //FeatFp.push_back(std::make_pair("80487", X86_FeatFp_80487));
-  //FeatFp.push_back(std::make_pair("80587", X86_FeatFp_80587));
-  //rCfgMdl.Set("Floating-point feature", FeatFp, X86_FeatFp_80587);
-
-  //ConfigurationModel::Enum FeatSimd;
-  //FeatSimd.push_back(std::make_pair("mmx",     X86_FeatSimd_Mmx    ));
-  //FeatSimd.push_back(std::make_pair("mmx+",    X86_FeatSimd_MmxPlus));
-  //FeatSimd.push_back(std::make_pair("emmx",    X86_FeatSimd_Emmx   ));
-  //FeatSimd.push_back(std::make_pair("3dnow!",  X86_FeatSimd_3dNow  ));
-  //FeatSimd.push_back(std::make_pair("sse",     X86_FeatSimd_Sse    ));
-  //FeatSimd.push_back(std::make_pair("sse 2",   X86_FeatSimd_Sse2   ));
-  //FeatSimd.push_back(std::make_pair("sse 3",   X86_FeatSimd_Sse3   ));
-  //FeatSimd.push_back(std::make_pair("ssse 3",  X86_FeatSimd_Ssse3  ));
-  //FeatSimd.push_back(std::make_pair("sse 4.1", X86_FeatSimd_Sse41  ));
-  //FeatSimd.push_back(std::make_pair("sse 4a",  X86_FeatSimd_Sse4a  ));
-  //FeatSimd.push_back(std::make_pair("sse 4.2", X86_FeatSimd_Sse42  ));
-  //FeatSimd.push_back(std::make_pair("aes",     X86_FeatSimd_Aes    ));
-  //FeatSimd.push_back(std::make_pair("avx",     X86_FeatSimd_Avx    ));
-  //rCfgMdl.Set("SIMD feature", FeatSimd, X86_FeatSimd_Avx);
-
-  //rCfgMdl.Set("undocumented instruction", true);
 }

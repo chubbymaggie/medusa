@@ -2,16 +2,12 @@
 #include "stack_analyzer.hpp"
 #include "medusa/module.hpp"
 
-WindowsOperatingSystem::~WindowsOperatingSystem(void)
-{
-}
-
 std::string WindowsOperatingSystem::GetName(void) const
 {
   return "MS Windows";
 }
 
-bool WindowsOperatingSystem::InitializeCpuContext(CpuContext& rCpuCtxt) const
+bool WindowsOperatingSystem::InitializeCpuContext(Document const& rDoc, CpuContext& rCpuCtxt) const
 {
   CpuInformation const& rCpuInfo = rCpuCtxt.GetCpuInformation();
   auto IdFs = rCpuInfo.ConvertNameToIdentifier("fs");
@@ -22,10 +18,17 @@ bool WindowsOperatingSystem::InitializeCpuContext(CpuContext& rCpuCtxt) const
     return false;
   if (rCpuCtxt.AddMapping(Address(Fs, 0x0), 0x7fdf0000) == false)
     return false;
+
+  auto StartAddr = rDoc.GetAddressFromLabelName("start");
+  u64 StartAddrVal = StartAddr.GetOffset();
+  auto IdD = rCpuInfo.ConvertNameToIdentifier("rdx"); // it doesn't matter to use rdx instead of ecx or cx
+  if (rCpuCtxt.WriteRegister(IdD, &StartAddrVal, sizeof(StartAddrVal)) == false)
+    return false;
+
   return true;
 }
 
-bool WindowsOperatingSystem::InitializeMemoryContext(MemoryContext& rMemCtxt) const
+bool WindowsOperatingSystem::InitializeMemoryContext(Document const& rDoc, MemoryContext& rMemCtxt) const
 {
   // TODO: create a fake _TEB/_PEB
   if (rMemCtxt.AllocateMemory(0x7fdf0000, 0x1000, nullptr) == false)
@@ -42,128 +45,41 @@ bool WindowsOperatingSystem::IsSupported(Loader const& rLdr, Architecture const&
   return false;
 }
 
-void WindowsOperatingSystem::AnalyzeFunction(Address const& rFuncAddr, Analyzer& rAnlz) const
+bool WindowsOperatingSystem::ProvideDetails(Document& rDoc) const
 {
-  return;
-  auto pFunc = dynamic_cast<Function*>(m_rDoc.GetMultiCell(rFuncAddr));
-  if (pFunc == nullptr)
-    return;
-  auto spArch = ModuleManager::Instance().GetArchitecture(m_rDoc.GetCell(rFuncAddr)->GetArchitectureTag());
-  if (spArch == nullptr)
-    return;
+  // TODO: determine if the PE is 32-bit or 64-bit
 
-  enum RegisterState { Ignored, NotSaved, Saved };
+ u16 Bitness = 32;
 
-  struct FindSavedNonVolatileRegister : public ExpressionVisitor
-  {
-    FindSavedNonVolatileRegister(std::map<u32, RegisterState> const& rNonVolatileRegisters, u32 StackPointerRegister)
-      : m_rNonVolatileRegisters(rNonVolatileRegisters)
-      , m_SavedNonVolatileRegister(), m_RestoredNonVolatileRegister()
-      , m_StackPointerRegister(StackPointerRegister)
-    {
-    }
+  TypeDetail VoidType("VOID", TypeDetail::VoidType, 0);
+  TypedValueDetail::List ExitProcessParams;
+  ExitProcessParams.push_back(TypedValueDetail(
+      "UINT", TypeDetail::IntegerType, 32,
+      "uExitCode", Id(), ValueDetail::DecimalType));
+  FunctionDetail ExitProcessFunc("kernel32.dll!ExitProcess", VoidType, ExitProcessParams);
+  rDoc.SetFunctionDetail(Sha1("kernel32.dll!ExitProcess"), ExitProcessFunc);
 
-    virtual Expression* VisitOperation(u32 Type, Expression const* pLeftExpr, Expression const* pRightExpr)
-    {
-      if (Type != OperationExpression::OpAff)
-        return nullptr;
+  TypeDetail IntType("int", TypeDetail::IntegerType, 32);
+  TypedValueDetail::List MessageBoxAParams;
+  MessageBoxAParams.push_back(TypedValueDetail(
+        "HWND", TypeDetail::TypedefType, Bitness,
+        "hWnd", Id(), ValueDetail::HexadecimalType));
+  MessageBoxAParams.push_back(TypedValueDetail(
+        "LPCSTR", TypeDetail::TypedefType, Bitness,
+        "lpText", Id(), ValueDetail::ReferenceType));
+  MessageBoxAParams.push_back(TypedValueDetail(
+        "LPCSTR", TypeDetail::TypedefType, Bitness,
+        "lpCaption", Id(), ValueDetail::ReferenceType));
+  MessageBoxAParams.push_back(TypedValueDetail(
+        "UINT", TypeDetail::IntegerType, 32,
+        "uType", Id(), ValueDetail::ConstantType, Id()));
+  FunctionDetail MessageBoxAFunc("user32.dll!MessageBoxA", IntType, MessageBoxAParams);
+  rDoc.SetFunctionDetail(Sha1("user32.dll!MessageBoxA"), MessageBoxAFunc);
 
-      auto pSavedDst    = dynamic_cast<MemoryExpression const*>(pLeftExpr);
-      auto pSavedIdExpr = dynamic_cast<IdentifierExpression const*>(pRightExpr);
-      if (pSavedDst && pSavedIdExpr)
-      {
-        ExpressionVisitor_ContainIdentifier ci(m_StackPointerRegister);
-        pSavedDst->Visit(&ci);
-        if (ci.GetResult())
-        {
-          u32 Id = pSavedIdExpr->GetId();
-          auto itRegState = m_rNonVolatileRegisters.find(Id);
-          if (itRegState != std::end(m_rNonVolatileRegisters) && itRegState->second == NotSaved)
-            m_SavedNonVolatileRegister = Id;
-        }
-      }
+  return true;
+}
 
-      auto pRestoredSrc    = dynamic_cast<MemoryExpression const*>(pRightExpr);
-      auto pRestoredIdExpr = dynamic_cast<IdentifierExpression const*>(pLeftExpr);
-      if (pRestoredSrc && pRestoredIdExpr)
-      {
-        ExpressionVisitor_ContainIdentifier ci(m_StackPointerRegister);
-        pRestoredSrc->Visit(&ci);
-        if (ci.GetResult())
-        {
-          u32 Id = pRestoredIdExpr->GetId();
-          auto itRegState = m_rNonVolatileRegisters.find(Id);
-          if (itRegState != std::end(m_rNonVolatileRegisters) && itRegState->second == Saved)
-            m_RestoredNonVolatileRegister = Id;
-        }
-      }
-      return nullptr;
-    }
-    std::map<u32, RegisterState> const& m_rNonVolatileRegisters;
-    u32                                 m_SavedNonVolatileRegister;
-    u32                                 m_RestoredNonVolatileRegister;
-    u32 const                           m_StackPointerRegister;
-  };
-
-  struct X86_FindNonVolatileRegister : public Analyzer::Tracker
-  {
-    X86_FindNonVolatileRegister(CpuInformation const* pCpuInfo)
-      : m_pCpuInfo(pCpuInfo)
-      , m_NonVolatileRegisters()
-    {
-      static char const *s_NonVolatileRegisters[]
-      = { "ebp", "rbp", "ebx", "rbx", "edi", "rdi", "esi", "rsi", "r12d", "r12", "r13d", "r13", "r14d", "r14", "r15d", "r15", nullptr };
-      for (auto pRegName = s_NonVolatileRegisters; *pRegName; ++pRegName)
-      {
-        u32 Id = pCpuInfo->ConvertNameToIdentifier(*pRegName);
-        m_NonVolatileRegisters[Id] = NotSaved;
-      }
-    }
-    CpuInformation const* m_pCpuInfo;
-    std::map<u32, RegisterState> m_NonVolatileRegisters; /* non-volatile registers: RBP,RBX,RDI,RSI,R12,R13,R14,R15 */
-
-    virtual bool Track(Analyzer& rAnlz, Document& rDoc, Address const& rAddr)
-    {
-      auto spInsn = std::dynamic_pointer_cast<Instruction>(rDoc.GetCell(rAddr));
-      if (spInsn == nullptr)
-        return false;
-      if (spInsn->GetOperationType() == Instruction::OpRet)
-        return false;
-
-      u32 StkPtrReg = m_pCpuInfo->GetRegisterByType(CpuInformation::StackPointerRegister);
-      auto SemList = spInsn->GetSemantic();
-      auto pVisitor = new FindSavedNonVolatileRegister(m_NonVolatileRegisters, StkPtrReg);
-      for (auto itSem = std::begin(SemList); itSem != std::end(SemList); ++itSem)
-      {
-        pVisitor->m_SavedNonVolatileRegister = 0;
-        pVisitor->m_RestoredNonVolatileRegister = 0;
-        (*itSem)->Visit(pVisitor);
-        if (pVisitor->m_SavedNonVolatileRegister)
-        {
-          spInsn->SetComment((boost::format("saved non-volatile register %s")
-            % m_pCpuInfo->ConvertIdentifierToName(pVisitor->m_SavedNonVolatileRegister)).str());
-          m_NonVolatileRegisters[pVisitor->m_SavedNonVolatileRegister] = Saved;
-        }
-        if (pVisitor->m_RestoredNonVolatileRegister)
-        {
-          spInsn->SetComment((boost::format("restored non-volatile register %s")
-            % m_pCpuInfo->ConvertIdentifierToName(pVisitor->m_RestoredNonVolatileRegister)).str());
-          m_NonVolatileRegisters[pVisitor->m_SavedNonVolatileRegister] = Ignored;
-        }
-      }
-      delete pVisitor;
-
-      for (auto itReg = std::begin(m_NonVolatileRegisters); itReg != std::end(m_NonVolatileRegisters); ++itReg)
-        if (itReg->second == NotSaved)
-          return true;
-
-      return false;
-    }
-  };
-
-  // hint: http://forums.codeguru.com/showthread.php?357967-return-type-of-constructor&s=423d28f583ffd8a801777324549e7c28&p=1237813#post1237813
-  X86_FindNonVolatileRegister fnvr(spArch->GetCpuInformation());
-  X86StackAnalyzerTracker sat(spArch->GetCpuInformation());
-  rAnlz.TrackOperand(m_rDoc, rFuncAddr, fnvr);
-  rAnlz.TrackOperand(m_rDoc, rFuncAddr, sat);
+bool WindowsOperatingSystem::AnalyzeFunction(Document& rDoc, Address const& rAddress)
+{
+  return true;
 }

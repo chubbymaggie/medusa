@@ -1,102 +1,98 @@
 #include "medusa/medusa.hpp"
 #include "elf_loader.hpp"
 
-#include <typeinfo>
+#include <algorithm>
 
-ElfLoader::ElfLoader(Document& rDoc)
-  : Loader(rDoc)
-  , m_rDoc(rDoc)
-  , m_IsValid(false)
-  , m_Machine(EM_NONE)
+ElfLoader::ElfLoader(void)
 {
-  if (rDoc.GetFileBinaryStream().GetSize() < sizeof(Elf32_Ehdr))
-    return;
-  rDoc.GetFileBinaryStream().Read(0x0, m_Ident, EI_NIDENT);
-
-  if (memcmp(m_Ident, ELFMAG, SELFMAG))
-    return;
-
-  rDoc.GetFileBinaryStream().Read(EI_NIDENT + sizeof(u16), m_Machine);
-
-  switch (GetWordSize())
-  {
-  case 32: m_Elf._32 = new ElfInterpreter<32>(rDoc, GetEndianness()); break;
-  case 64: m_Elf._64 = new ElfInterpreter<64>(rDoc, GetEndianness()); break;
-  default: return;
-  }
-
-  m_IsValid = true;
+  memset(m_Ident, 0x0, sizeof(m_Ident));
 }
 
 std::string ElfLoader::GetName(void) const
 {
-  switch (GetWordSize())
+  switch (m_Ident[EI_CLASS])
   {
-  case 32: return "ELF32";
-  case 64: return "ELF64";
-  default: return "Invalid ELF";
+  case ELFCLASSNONE: return "ELF (invalid)";
+  case ELFCLASS32:   return "ELF 32-bit";
+  case ELFCLASS64:   return "ELF 64-bit";
+  default:           return "ELF (unknown)";
   }
 }
 
-void ElfLoader::Map(void)
+bool ElfLoader::IsCompatible(BinaryStream const& rBinStrm)
 {
-  switch (GetWordSize())
+  if (rBinStrm.GetSize() < sizeof(Elf32_Ehdr))
+    return false;
+
+  if (!rBinStrm.Read(0x0, m_Ident, EI_NIDENT))
+    return false;
+
+  if (!rBinStrm.Read(EI_NIDENT + sizeof(u16), m_Machine))
+    return false;
+
+  if (memcmp(m_Ident, ELFMAG, SELFMAG))
+    return false;
+
+  return true;
+}
+
+void ElfLoader::Map(Document& rDoc, Architecture::VectorSharedPtr const& rArchs)
+{
+  switch (m_Ident[EI_CLASS])
   {
-  case 32: m_Elf._32->Map(); break;
-  case 64: m_Elf._64->Map(); break;
-  default: return;
+  case ELFCLASS32: Map<32>(rDoc, rArchs); break;
+  case ELFCLASS64: Map<64>(rDoc, rArchs); break;
+  default: assert(0 && "Unknown ELF class");
   }
 }
 
-void ElfLoader::Translate(Address const& rVirtAddr, TOffset& rOffset)
+void ElfLoader::FilterAndConfigureArchitectures(Architecture::VectorSharedPtr& rArchs) const
 {
+  Tag ArchTag;
+  u8  ArchMode;
+
+  if (!FindArchitectureTagAndModeByMachine(rArchs, ArchTag, ArchMode))
+    return;
+
+  rArchs.erase(std::remove_if(std::begin(rArchs), std::end(rArchs), [&ArchTag](Architecture::SharedPtr spArch)
+  { return ArchTag != spArch->GetTag();}), std::end(rArchs));
 }
 
-Address ElfLoader::GetEntryPoint(void)
-{
-  switch (GetWordSize())
-  {
-  case 32: return m_Elf._32->GetEntryPoint();
-  case 64: return m_Elf._64->GetEntryPoint();
-  default: return Address();
-  }
-}
-
-EEndianness ElfLoader::GetEndianness(void)
-{
-  switch (m_Ident[EI_DATA])
-  {
-  case ELFDATA2LSB: return LittleEndian ;
-  case ELFDATA2MSB: return BigEndian    ;
-  default:          return EndianUnknown;
-  }
-}
-
-Architecture::SharedPtr ElfLoader::GetMainArchitecture(Architecture::VectorSharedPtr const& rArchitectures)
+bool ElfLoader::FindArchitectureTagAndModeByMachine(
+    Architecture::VectorSharedPtr const& rArchs,
+    Tag& rArchTag,
+    u8&  rArchMode
+    ) const
 {
   std::string ArchName = "";
+  std::string ModeName = "";
 
   switch (m_Machine)
   {
-  case EM_386: case EM_X86_64: ArchName = "Intel x86";       break;
+  case EM_386:
+    ArchName = "Intel x86";
+    ModeName = "32-bit";
+    break;
+
+  case EM_X86_64:
+    ArchName = "Intel x86";
+    ModeName = "64-bit";
+    break;
+
   case EM_ARM:                 ArchName = "ARM";             break;
   case EM_AVR:                 ArchName = "Atmel AVR 8-bit"; break;
   default:                                                   break;
   }
 
-  if (ArchName.empty())
-    return Architecture::SharedPtr();
-
-  if (rArchitectures.size() > 0)
-    BOOST_FOREACH(Architecture::SharedPtr pArchitecture, rArchitectures)
+  for (auto itArch = std::begin(rArchs), itEnd = std::end(rArchs); itArch != itEnd; ++itArch)
+  {
+    if (ArchName == (*itArch)->GetName())
     {
-      if (pArchitecture->GetName() == ArchName)
-        return pArchitecture;
+      rArchTag  = (*itArch)->GetTag();
+      rArchMode = (*itArch)->GetModeByName(ModeName);
+      return true;
     }
-  return Architecture::SharedPtr();
-}
+  }
 
-void ElfLoader::Configure(Configuration& rCfg)
-{
-  rCfg.Set("Bit", GetWordSize());
+  return false;
 }

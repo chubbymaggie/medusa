@@ -18,26 +18,22 @@
 
 MEDUSA_NAMESPACE_BEGIN
 
-// Don't forget to export a Loader* GetLoader(Document& rDoc); function
-class Medusa_EXPORT           Loader
+class Medusa_EXPORT Loader
 {
 public:
   typedef boost::shared_ptr<Loader> SharedPtr;
   typedef std::vector<SharedPtr>    VectorSharedPtr;
 
-                              Loader(Document&) {}
-  virtual                    ~Loader(void) {}
+  virtual            ~Loader(void) {}
 
-  virtual std::string         GetName(void) const = 0;
-  virtual bool                IsSupported(void) = 0;
-  virtual void                Map(void) = 0;
-  virtual void                Translate(Address const& rVirtAddr, TOffset& rRawOff) = 0;
-  virtual Address             GetEntryPoint(void) = 0;
-  virtual Architecture::SharedPtr  GetMainArchitecture(Architecture::VectorSharedPtr const& rArchitectures) = 0;
-  virtual void                Configure(Configuration& rCfg) {};
+  virtual std::string GetName(void) const = 0;
+  virtual u8          GetDepth(void) const = 0;
+  virtual bool        IsCompatible(BinaryStream const& rBinStrm) = 0;
+  virtual void        Map(Document& rDoc, Architecture::VectorSharedPtr const& rArchs) = 0;
+  virtual void        FilterAndConfigureArchitectures(Architecture::VectorSharedPtr& rArchs) const = 0;
 };
 
-typedef Loader* (*TGetLoader)(Document&);
+typedef Loader* (*TGetLoader)(void);
 
 MEDUSA_NAMESPACE_END
 

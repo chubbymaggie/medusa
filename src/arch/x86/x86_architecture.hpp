@@ -34,21 +34,17 @@ private:
   class X86CpuInformation : public CpuInformation
   {
   public:
-    X86CpuInformation(Configuration const& rCfg) : m_rCfg(rCfg) {}
     virtual char const* ConvertIdentifierToName(u32 Id) const;
     virtual u32 ConvertNameToIdentifier(std::string const& rName) const;
-    virtual u32 GetRegisterByType(CpuInformation::Type RegType) const;
+    virtual u32 GetRegisterByType(CpuInformation::Type RegType, u8 Mode) const;
     virtual u32 GetSizeOfRegisterInBit(u32 Id) const;
     virtual bool IsRegisterAliased(u32 Id0, u32 Id1) const;
-
-  private:
-    Configuration const& m_rCfg;
   } m_CpuInfo;
 
   class X86CpuContext : public CpuContext
   {
   public:
-    X86CpuContext(Configuration const& rCfg, CpuInformation const& rCpuInfo) : CpuContext(rCpuInfo), m_rCfg(rCfg) { memset(&m_Context, 0x0, sizeof(m_Context)); }
+    X86CpuContext(u8 Bits, CpuInformation const& rCpuInfo) : CpuContext(rCpuInfo), m_Bits(Bits) { memset(&m_Context, 0x0, sizeof(m_Context)); }
     virtual bool ReadRegister (u32 Register, void*       pValue, u32 Size) const;
     virtual bool WriteRegister(u32 Register, void const* pValue, u32 Size, bool SignExtend = false);
     virtual void* GetRegisterAddress(u32 Register);
@@ -74,34 +70,51 @@ private:
       u32 flags;
     } m_Context;
 
-    Configuration const& m_rCfg;
+    u8 m_Bits;
   };
 
 public:
-  X86Architecture(void)
-    : Architecture(MEDUSA_ARCH_TAG('x','8','6'))
-    , m_CpuInfo(m_Cfg)
-    , m_Mode(0x0)
-    , m_CpuModel(X86_Arch_Sse4a)
-    , m_ProcType(X86_ProcType_INTEL)
-  {}
+  X86Architecture(void);
   ~X86Architecture(void) {}
 
   virtual std::string           GetName(void) const { return "Intel x86"; }
   virtual bool                  Translate(Address const& rVirtAddr, TOffset& rPhysOff) { return false; }
   virtual EEndianness           GetEndianness(void) { return LittleEndian; }
-  virtual bool                  Disassemble(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn);
-  virtual bool                  FormatInstruction(
+  virtual bool                  Disassemble(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  virtual NamedModeVector       GetModes(void) const
+  {
+    NamedModeVector X86Modes;
+    X86Modes.reserve(3);
+    // LATER: Check if it's not better to expose real, protected(16-bit/32-bit), long
+    X86Modes.push_back(NamedMode("16-bit", X86_Bit_16));
+    X86Modes.push_back(NamedMode("32-bit", X86_Bit_32));
+    X86Modes.push_back(NamedMode("64-bit", X86_Bit_64));
+    return X86Modes;
+  }
+
+  virtual u8                    GetDefaultMode(Address const&) const
+  {
+    return 0;
+  }
+
+  virtual bool FormatOperand(
     Document      const& rDoc,
-    BinaryStream  const& rBinStrm,
+    Address       const& rAddress,
+    Instruction   const& rInstruction,
+    Operand       const& rOperand,
+    u8                   OperandNo,
+    PrintData          & rPrintData) const;
+
+  virtual bool FormatInstruction(
+    Document      const& rDoc,
     Address       const& rAddr,
     Instruction   const& rInsn,
-    std::string        & rStrCell,
-    Cell::Mark::List   & rMarks) const;
-  virtual void                  FillConfigurationModel(ConfigurationModel& rCfgMdl);
+    PrintData          & rPrintData) const;
+
   virtual CpuInformation const* GetCpuInformation(void) const { return &m_CpuInfo; }
-  virtual CpuContext*           MakeCpuContext(void) const { return new X86CpuContext(m_Cfg, m_CpuInfo); }
+  virtual CpuContext*           MakeCpuContext(void) const { return new X86CpuContext(0, m_CpuInfo); }
   virtual MemoryContext*        MakeMemoryContext(void) const { return new MemoryContext(m_CpuInfo); }
+
   virtual Expression*           UpdateFlags(Instruction& rInsn, Expression* pResultExpr);
   virtual OperationExpression*  SetFlags(Instruction& rInsn, u32 Flags);
   virtual OperationExpression*  ResetFlags(Instruction& rInsn, u32 Flags);
@@ -133,18 +146,7 @@ private:
 private:
   static const char * m_Mnemonic[];
 
-  void                FormatOperand(
-    std::ostringstream & rInsnBuf,
-    Cell::Mark::List   & rMarks,
-    Document      const& rDoc,
-    TOffset              Offset,
-    Instruction   const& rInsn,
-    Operand       const* pOprd) const;
   void                ApplySegmentOverridePrefix(Instruction& rInsn, Operand* pOprd);
-
-  u32 m_Mode;     /* Unused */
-  u32 m_CpuModel; /* Unused */
-  u32 m_ProcType; /* Unused */
 };
 
 #endif // !_X86_ARCHITECTURE_

@@ -67,7 +67,7 @@ u32 Operand::GetSizeInBit(void) const
   return 0;
 }
 
-Expression * Operand::GetSemantic(CpuInformation const* pCpuInfo, u8 InstructionLength /*= 0*/, bool Dereference /*= true*/) const
+Expression * Operand::GetSemantic(u8 Mode, CpuInformation const* pCpuInfo, u8 InstructionLength /*= 0*/, bool Dereference /*= true*/) const
 {
   Expression *pExpr = nullptr;
 
@@ -135,7 +135,7 @@ Expression * Operand::GetSemantic(CpuInformation const* pCpuInfo, u8 Instruction
       default: break;
       }
 
-      if (m_Reg == pCpuInfo->GetRegisterByType(CpuInformation::ProgramPointerRegister))
+      if (m_Reg == pCpuInfo->GetRegisterByType(CpuInformation::ProgramPointerRegister, Mode))
         Disp += InstructionLength;
 
       pExpr = new OperationExpression(
@@ -159,8 +159,8 @@ Expression * Operand::GetSemantic(CpuInformation const* pCpuInfo, u8 Instruction
 
     pExpr = new OperationExpression(
       OperationExpression::OpAdd,
-      new IdentifierExpression(pCpuInfo->GetRegisterByType(CpuInformation::ProgramPointerRegister), pCpuInfo),
-      new ConstantExpression(ConstType, m_Value + InstructionLength));
+      new IdentifierExpression(pCpuInfo->GetRegisterByType(CpuInformation::ProgramPointerRegister, Mode), pCpuInfo),
+      new ConstantExpression(ConstType, m_Value));
   }
 
   if (m_Type & O_MEM)

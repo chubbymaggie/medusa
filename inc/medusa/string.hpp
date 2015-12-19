@@ -13,81 +13,49 @@ class StringTrait
 public:
   virtual bool        IsValidCharacter(int Char) const = 0;
   virtual bool        IsFinalCharacter(int Char) const = 0;
-  virtual std::string ConvertToUf8(int Char)     const = 0;
-  virtual u16         CharacterLength(int Char)  const = 0;
+  virtual std::string ConvertToUtf8(void* pStrBuf, size_t StrBufLen) const = 0;
+  virtual u16         CharacterLength(int Char) const = 0;
 };
 
-class AsciiString : public StringTrait
+class Utf8StringTrait : public StringTrait
 {
 public:
-  typedef u8 CharType;
-  virtual bool IsValidCharacter(int Char) const
-  {
-    switch (Char)
-    {
-      case '\a': case '\b': case '\t': case '\n':
-      case '\v': case '\f': case '\r':
-                                      return true;
-      default:                        return !!isprint(Char & 0xff);
-    }
-  }
-  virtual bool IsFinalCharacter(int Char) const { return Char == '\0';  }
-  virtual std::string ConvertToUf8(int Char) const { return std::string(1, Char); }
-  virtual u16 CharacterLength(int Char) const { return 1; }
+  typedef s8          CharType;
+  virtual bool        IsValidCharacter(int Char) const;
+  virtual bool        IsFinalCharacter(int Char) const;
+  virtual std::string ConvertToUtf8(void* pStrBuf, size_t StrBufLen) const;
+  virtual u16         CharacterLength(int Char) const;
 };
 
 // TODO: Improve the handling of utf16 (it may require an external lib like ICU or iconv or utfcpp)
-class WinString : public StringTrait
+class Utf16StringTrait : public StringTrait
 {
 public:
-  typedef u16 CharType;
-  virtual bool IsValidCharacter(int Char) const
-  {
-    if ((Char & 0xff00) != 0x0) return false;
-
-    switch (Char & 0xff)
-    {
-      case '\a': case '\b': case '\t': case '\n':
-      case '\v': case '\f': case '\r':
-                                      return true;
-      default:                        return !!isprint(Char & 0xff);
-    }
-
-  }
-
-  virtual bool IsFinalCharacter(int Char) const { return (Char & 0xffff) == 0x0000; }
-  virtual std::string ConvertToUf8(int Char) const { return std::string(1, static_cast<char>(Char & 0xff)); }
-  virtual u16 CharacterLength(int Char) const { return 2; }
+  typedef s16         CharType;
+  virtual bool        IsValidCharacter(int Char) const;
+  virtual bool        IsFinalCharacter(int Char) const;
+  virtual std::string ConvertToUtf8(void* pStrBuf, size_t StrBufLen) const;
+  virtual u16         CharacterLength(int Char) const;
 };
 
 //! String is a Cell which handles a string.
 class Medusa_EXPORT String : public Cell
 {
 public:
-  enum StringType
+  enum
   {
     UnknownType,
-    AsciiType,
-    Utf16Type
+    Utf8Type,
+    Utf16Type,
   };
 
-  String(StringType Type = UnknownType, std::string const& rCharacters = "")
-    : Cell(CellData::StringType, static_cast<u16>(rCharacters.empty() ? 0 : rCharacters.length() + 1))
-    , m_Characters(rCharacters)
-    , m_StringType(Type) {}
-  String(StringType Type, std::string const& rCharacters, u16 StringLength)
-    : Cell(CellData::StringType, StringLength)
-    , m_Characters(rCharacters)
-    , m_StringType(Type) {}
-  String(CellData::SPtr spDna, std::string const& rComment = "")
-    : Cell(spDna, rComment) {}
+  String(u8 SubType, u16 Length)
+    : Cell(Cell::StringType, SubType, Length)
+  {}
+  String(CellData::SPtr spDna)
+    : Cell(spDna) {}
 
-  std::string const&  GetCharacters(void) const { return m_Characters; }
-  StringType          GetStringType(void) const { return m_StringType; }
-
-protected:
-  std::string m_Characters;
-  StringType  m_StringType;
+  StringTrait const* GetStringTrait(void) const;
 };
 
 MEDUSA_NAMESPACE_END

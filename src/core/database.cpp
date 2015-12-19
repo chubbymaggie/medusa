@@ -1,4 +1,5 @@
 #include "medusa/database.hpp"
+#include "medusa/log.hpp"
 
 MEDUSA_NAMESPACE_BEGIN
 
@@ -20,17 +21,22 @@ std::string Database::GetExtension(void) const
   return ".mdb"; // generic name
 }
 
-bool Database::IsCompatible(std::wstring const& rDatabasePath) const
+bool Database::IsCompatible(boost::filesystem::path const& rDatabasePath) const
 {
   return false;
 }
 
-bool Database::Open(std::wstring const& rFilePath)
+bool Database::Open(boost::filesystem::path const& rDatabasePath)
 {
   return false;
 }
 
-bool Database::Create(std::wstring const& rDatabasePath)
+bool Database::Create(boost::filesystem::path const& rDatabasePath, bool Force)
+{
+  return false;
+}
+
+bool Database::Flush(void)
 {
   return false;
 }
@@ -40,74 +46,26 @@ bool Database::Close(void)
   return false;
 }
 
-bool Database::SaveDocument(Document const& rDoc)
+Database& Database::SetBinaryStream(BinaryStream::SharedPtr spBinStrm)
 {
-  return false;
+  m_spBinStrm = spBinStrm;
+  return *this;
 }
 
-bool Database::SaveConfiguration(Configuration const& rCfg)
+BinaryStream::SharedPtr const Database::GetBinaryStream(void) const
 {
-  return false;
+  return m_spBinStrm;
 }
 
-bool Database::SaveMemoryArea(MemoryArea const& rMemArea)
+Database& Database::SetOperatingSystemName(std::string const& rOperatingSystemName)
 {
-  return false;
+  m_OsName = rOperatingSystemName;
+  return *this;
 }
 
-bool Database::SaveMultiCell(Address const& rAddress, MultiCell const& rMultiCell)
+std::string Database::GetOperatingSystemName(void) const
 {
-  return false;
-}
-
-bool Database::SaveCell(Address const& rAddress, Cell const& rCell)
-{
-  return false;
-}
-
-bool Database::SaveLabel(Address const& rAddress, Label const& rLabel)
-{
-  return false;
-}
-
-bool Database::SaveXRef(Address const& rSrcAddr, Address const& rDstAddr)
-{
-  return false;
-}
-
-bool Database::LoadDocument(Document& rDoc)
-{
-  return false;
-}
-
-bool Database::LoadConfiguration(Configuration& rCfg)
-{
-  return false;
-}
-
-bool Database::LoadMemoryArea(MemoryArea& rMemArea)
-{
-  return false;
-}
-
-bool Database::LoadMultiCell(Address const& rAddress, MultiCell& rMultiCell)
-{
-  return false;
-}
-
-bool Database::LoadCell(Address const& rAddress, Cell& rCell)
-{
-  return false;
-}
-
-bool Database::LoadLabel(Address const& rAddress, Label& rLabel)
-{
-  return false;
-}
-
-bool Database::LoadXRef(Address& rSrcAddr, Address& rDstAddr)
-{
-  return false;
+  return m_OsName;
 }
 
 MEDUSA_NAMESPACE_END

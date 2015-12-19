@@ -236,7 +236,7 @@ std::string ExpressionVisitor_FindOperations::ToString(void) const
 
 X86StackAnalyzerTracker::X86StackAnalyzerTracker(CpuInformation const* pCpuInfo) : m_pCpuInfo(pCpuInfo)
 {
-  m_RegisterOffsetList.push_back(ExpressionVisitor_FindOperations::RegisterOffset(pCpuInfo->GetRegisterByType(CpuInformation::StackPointerRegister)));
+  //m_RegisterOffsetList.push_back(ExpressionVisitor_FindOperations::RegisterOffset(pCpuInfo->GetRegisterByType(CpuInformation::StackPointerRegister)));
 }
 
 bool X86StackAnalyzerTracker::Track(Analyzer& rAnlz, Document& rDoc, Address const& rAddr)
@@ -244,14 +244,14 @@ bool X86StackAnalyzerTracker::Track(Analyzer& rAnlz, Document& rDoc, Address con
   auto spInsn = std::dynamic_pointer_cast<Instruction>(rDoc.GetCell(rAddr));
   if (spInsn == nullptr)
     return false;
-  if (spInsn->GetOperationType() == Instruction::OpRet)
+  if (spInsn->GetSubType() == Instruction::ReturnType)
   {
     // FIXME: We assume the first entry to be the stack register (esp/rsp)
-    auto const& rCurRegOff = m_RegisterOffsetList.front();
-    if (rCurRegOff.m_Offset != 0)
-      spInsn->Comment() += " [stk anlz failed]";
-    else
-      spInsn->Comment() += " [stk anlz succeed]";
+    //auto const& rCurRegOff = m_RegisterOffsetList.front();
+    //if (rCurRegOff.m_Offset != 0)
+    //  spInsn->Comment() += " [stk anlz failed]";
+    //else
+    //  spInsn->Comment() += " [stk anlz succeed]";
     return false;
   }
 
@@ -264,7 +264,7 @@ bool X86StackAnalyzerTracker::Track(Analyzer& rAnlz, Document& rDoc, Address con
   auto& rCurRegOff = fo.GetCurrentRegisterOffset();
   if (rCurRegOff.m_Id != 0)
   {
-    if (spInsn->GetOperationType() == Instruction::OpCall)
+    if (spInsn->GetSubType() == Instruction::CallType)
     {
       rCurRegOff.m_Offset += m_pCpuInfo->GetSizeOfRegisterInBit(rCurRegOff.m_Id) / 8;
     }
@@ -273,6 +273,6 @@ bool X86StackAnalyzerTracker::Track(Analyzer& rAnlz, Document& rDoc, Address con
       m_RegisterOffsetList.push_back(rCurRegOff);
   }
 
-  spInsn->Comment() += fo.ToString();
+  //spInsn->Comment() += fo.ToString();
   return true;
 }

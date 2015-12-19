@@ -7,6 +7,7 @@
 #include <limits>
 #include <boost/foreach.hpp>
 #include <boost/algorithm/string/join.hpp>
+#include <boost/filesystem/path.hpp>
 
 #include "boost/graph/graphviz.hpp"
 
@@ -88,9 +89,9 @@ public:
 
 struct AskForConfiguration : public boost::static_visitor<>
 {
-  AskForConfiguration(Configuration& rCfg) : m_rCfg(rCfg) {}
+  AskForConfiguration(ConfigurationModel& rCfgMdl) : m_rCfgMdl(rCfgMdl) {}
 
-  Configuration& m_rCfg;
+  ConfigurationModel& m_rCfgMdl;
 
   void operator()(ConfigurationModel::NamedBool const& rBool) const
   {
@@ -108,7 +109,7 @@ struct AskForConfiguration : public boost::static_visitor<>
 
       if (Result == "false" || Result == "true")
       {
-        m_rCfg.Set(rBool.GetName(), !!(Result == "true"));
+        m_rCfgMdl.SetEnum(rBool.GetName(), !!(Result == "true"));
         return;
       }
 
@@ -117,7 +118,7 @@ struct AskForConfiguration : public boost::static_visitor<>
 
       if (Choose == 0 || Choose == 1)
       {
-        m_rCfg.Set(rBool.GetName(), Choose);
+        m_rCfgMdl.SetEnum(rBool.GetName(), Choose ? true : false);
         return;
       }
     }
@@ -127,10 +128,10 @@ struct AskForConfiguration : public boost::static_visitor<>
   {
     std::cout << std::dec;
     std::cout << "ENUM TYPE: " << rEnum.GetName() << std::endl;
-    for (ConfigurationModel::Enum::const_iterator It = rEnum.GetValue().begin();
-      It != rEnum.GetValue().end(); ++It)
+    for (Configuration::Enum::const_iterator It = rEnum.GetConfigurationValue().begin();
+      It != rEnum.GetConfigurationValue().end(); ++It)
     {
-      if (It->second == m_rCfg.Get(rEnum.GetName()))
+      if (It->second == m_rCfgMdl.GetEnum(rEnum.GetName()))
         std::cout << "* ";
       else
         std::cout << "  ";
@@ -149,37 +150,20 @@ struct AskForConfiguration : public boost::static_visitor<>
       std::istringstream iss(Result);
       if (!(iss >> Choose)) continue;
 
-      for (ConfigurationModel::Enum::const_iterator It = rEnum.GetValue().begin();
-        It != rEnum.GetValue().end(); ++It)
+      for (Configuration::Enum::const_iterator It = rEnum.GetConfigurationValue().begin();
+        It != rEnum.GetConfigurationValue().end(); ++It)
         if (It->second == Choose)
         {
-          m_rCfg.Set(rEnum.GetName(), Choose);
+          m_rCfgMdl.SetEnum(rEnum.GetName(), Choose ? true : false);
           return;
         }
     }
   }
 };
 
-std::wstring mbstr2wcstr(std::string const& s)
+void DummyLog(std::string const & rMsg)
 {
-  wchar_t *wcs = new wchar_t[s.length() + 1];
-  std::wstring result;
-
-  if (mbstowcs(wcs, s.c_str(), s.length()) == -1)
-    throw std::invalid_argument("convertion failed");
-
-  wcs[s.length()] = L'\0';
-
-  result = wcs;
-
-  delete[] wcs;
-
-  return result;
-}
-
-void DummyLog(std::wstring const & rMsg)
-{
-  std::wcout << rMsg << std::flush;
+  std::cout << rMsg << std::flush;
 }
 
 class PrintSemanticTracker : public Analyzer::Tracker
@@ -190,7 +174,7 @@ public:
     auto spInsn = std::dynamic_pointer_cast<Instruction const>(rDoc.GetCell(rAddr));
     if (spInsn == nullptr)
       return false;
-    if (spInsn->GetOperationType() == Instruction::OpRet)
+    if (spInsn->GetSubType() == Instruction::ReturnType)
       return false;
     auto& rSem = spInsn->GetSemantic();
     std::for_each(std::begin(rSem), std::end(rSem), [&rAddr](Expression const* pExpr)
@@ -209,17 +193,17 @@ public:
     auto spInsn = std::dynamic_pointer_cast<Instruction const>(rDoc.GetCell(rAddr));
     if (spInsn == nullptr)
       return false;
-    if (spInsn->GetOperationType() == Instruction::OpRet)
+    if (spInsn->GetSubType() == Instruction::ReturnType)
       return false;
     for (u8 i = 0; i < OPERAND_NO; ++i)
       if (spInsn->Operand(i)->GetType() & O_MEM)
       {
         std::string CellStr;
-        Cell::Mark::List Marks;
+        PrintData Data;
         auto pMemArea = rDoc.GetMemoryArea(rAddr);
         if (pMemArea == nullptr)
           return false;
-        if (rAnlz.FormatCell(rDoc, rDoc.GetFileBinaryStream(), rAddr, *spInsn, CellStr, Marks) == false)
+        if (rAnlz.FormatCell(rDoc, rAddr, *spInsn, Data) == false)
           return false;
         std::cout << rAddr.ToString() << ": " << CellStr << std::endl;
         return true;
@@ -241,16 +225,15 @@ public:
     auto spInsn = std::dynamic_pointer_cast<Instruction>(rDoc.GetCell(rAddr));
     if (spInsn == nullptr)
       return false;
-    spInsn->SetComment((boost::format("param l.: %d") % m_InsnNo).str());
     rDoc.SetCell(rAddr, spInsn, true);
-    std::string CellStr;
-    Cell::Mark::List Marks;
+    rDoc.SetComment(rAddr, (boost::format("param l.: %d") % m_InsnNo).str());
+    PrintData Data;
     auto pMemArea = rDoc.GetMemoryArea(rAddr);
     if (pMemArea == nullptr)
       return false;
-    if (rAnlz.FormatCell(rDoc, rDoc.GetFileBinaryStream(), rAddr, *spInsn, CellStr, Marks) == false)
+    if (rAnlz.FormatCell(rDoc, rAddr, *spInsn, Data) == false)
       return false;
-    std::cout << CellStr << std::endl;
+    std::cout << Data.GetTexts() << std::endl;
 
     return true;
   }
@@ -260,41 +243,25 @@ int main(int argc, char **argv)
 {
   std::cout.sync_with_stdio(false);
   std::wcout.sync_with_stdio(false);
-  std::string file_path;
-  std::string mod_path;
+  boost::filesystem::path file_path;
+  boost::filesystem::path mod_path;
   Log::SetLog(DummyLog);
 
   try
   {
-    if (argc != 3)
-    {
-      do
-      {
-        std::cout << "Please type the file path:" << std::endl;
-        std::cin >> file_path;
-        std::cout << "Please type the modules path:" << std::endl;
-        std::cin >> mod_path;
-      }
-      while (file_path.empty());
-    }
-    else
-    {
-      file_path = argv[1];
-      mod_path = argv[2];
-    }
+    if (argc != 2)
+      return 0;
+    file_path = argv[1];
 
-    std::wstring wfile_path = mbstr2wcstr(file_path);
-    std::wstring wmod_path  = mbstr2wcstr(mod_path );
+    std::wcout << L"Analyzing the following file: \""         << file_path << "\"" << std::endl;
+    std::wcout << L"Using the following path for modules: \"" << mod_path  << "\"" << std::endl;
 
-    std::wcout << L"Analyzing the following file: \""         << wfile_path << "\"" << std::endl;
-    std::wcout << L"Using the following path for modules: \"" << wmod_path  << "\"" << std::endl;
+    BinaryStream::SharedPtr bin_strm = std::make_shared<FileBinaryStream>(file_path);
+    Medusa m;
 
-    Medusa m(wfile_path);
+    auto& mod_mgr = ModuleManager::Instance();
 
-    //DummyView dv(m.GetDocument());
-    m.LoadModules(wmod_path);
-
-    ModuleManager& mod_mgr = ModuleManager::Instance();
+    mod_mgr.LoadModules(L".", *bin_strm);
 
     if (mod_mgr.GetLoaders().empty())
     {
@@ -304,55 +271,41 @@ int main(int argc, char **argv)
 
     std::cout << "Choose a executable format:" << std::endl;
     AskFor<Loader::VectorSharedPtr::value_type, Loader::VectorSharedPtr> AskForLoader;
-    Loader::VectorSharedPtr::value_type spLdr = AskForLoader(mod_mgr.GetLoaders());
-    std::cout << "Interpreting executable format using \"" << spLdr->GetName() << "\"..." << std::endl;
-    spLdr->Map();
+    Loader::VectorSharedPtr::value_type ldr = AskForLoader(mod_mgr.GetLoaders());
+    std::cout << "Interpreting executable format using \"" << ldr->GetName() << "\"..." << std::endl;
     std::cout << std::endl;
 
     std::cout << "Choose an architecture:" << std::endl;
-    AskFor<Architecture::VectorSharedPtr::value_type, Architecture::VectorSharedPtr> AskForArch;
-    Architecture::VectorSharedPtr::value_type spArch = spLdr->GetMainArchitecture(mod_mgr.GetArchitectures());
-    if (!spArch)
-      spArch = AskForArch(mod_mgr.GetArchitectures());
+    //AskFor<Architecture::VectorSharedPtr::value_type, Architecture::VectorSharedPtr> AskForArch;
+    auto archs = mod_mgr.GetArchitectures();
+    ldr->FilterAndConfigureArchitectures(archs);
+    if (archs.empty())
+      throw std::runtime_error("no architecture available");
+
+    auto os = mod_mgr.GetOperatingSystem(ldr, archs.front());
 
     std::cout << std::endl;
 
     ConfigurationModel CfgMdl;
-    spArch->FillConfigurationModel(CfgMdl);
-    spLdr->Configure(CfgMdl.GetConfiguration());
 
     std::cout << "Configuration:" << std::endl;
-    for (ConfigurationModel::ConstIterator It = CfgMdl.Begin(); It != CfgMdl.End(); ++It)
-      boost::apply_visitor(AskForConfiguration(CfgMdl.GetConfiguration()), *It);
+    for (ConfigurationModel::ConstIterator itCfg = CfgMdl.Begin(), itEnd = CfgMdl.End(); itCfg != CfgMdl.End(); ++itCfg)
+      boost::apply_visitor(AskForConfiguration(CfgMdl), itCfg->second);
 
-    spArch->UseConfiguration(CfgMdl.GetConfiguration());
-    mod_mgr.RegisterArchitecture(spArch);
+    AskFor<Database::VectorSharedPtr::value_type, Database::VectorSharedPtr> AskForDb;
+    auto db = AskForDb(mod_mgr.GetDatabases());
+    boost::filesystem::path db_path = file_path;
+    db_path.replace_extension(db->GetExtension());
+    db->Create(db_path, false);
 
-    auto spOs = mod_mgr.GetOperatingSystem(spLdr, spArch);
-
+    m.Start(bin_strm, db, ldr, archs, os);
     std::cout << "Disassembling..." << std::endl;
-    m.Start(spLdr, spArch, spOs);
-
-    auto mcells = m.GetDocument().GetMultiCells();
-    for (auto mc = std::begin(mcells); mc != std::end(mcells); ++mc)
-    {
-      if (mc->second->GetType() != MultiCell::FunctionType)
-        continue;
-      auto func = static_cast<Function const*>(mc->second);
-      auto lbl = m.GetDocument().GetLabelFromAddress(mc->first);
-      if (lbl.GetType() == Label::Unknown)
-        continue;
-      //m.DumpControlFlowGraph(*func, (boost::format("%s.gv") % lbl.GetLabel()).str());
-    }
+    m.WaitForTasks();
 
     int step = 100;
-    FullDisassemblyView fdv(m, new StreamPrinter(m, std::cout), Printer::ShowAddress | Printer::AddSpaceBeforeXref, 80, step, (*m.GetDocument().Begin())->GetBaseAddress());
-    do fdv.Print();
-    while (fdv.Scroll(0, step));
-
-    auto db = mod_mgr.GetDatabase("Text");
-    db->Create(wfile_path + mbstr2wcstr(db->GetExtension()));
-    db->SaveDocument(m.GetDocument());
+    FullDisassemblyView fdv(m, FormatDisassembly::ShowAddress | FormatDisassembly::AddSpaceBeforeXref, 80, step, m.GetDocument().GetStartAddress());
+    //do fdv.Print();
+    //while (fdv.MoveView(0, step));
   }
   catch (std::exception& e)
   {

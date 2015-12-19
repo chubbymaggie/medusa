@@ -40,6 +40,10 @@ bool MemoryContext::ReadMemory(u64 LinearAddress, void* pValue, u32 ValueSize) c
 
   // LATER: Check boundary!
   auto Offset = LinearAddress - MemChnk.m_LinearAddress;
+  //std::cout << "read: ";
+  //for (size_t i = 0; i < ValueSize; ++i)
+  //  std::cout << std::hex << static_cast<int>(*(reinterpret_cast<u8 const*>(MemChnk.m_Buffer) + Offset + i)) << " ";
+  //std::cout << std::endl;
   memcpy(pValue, reinterpret_cast<u8 const*>(MemChnk.m_Buffer) + Offset, ValueSize);
   return true;
 }
@@ -76,9 +80,9 @@ bool MemoryContext::AllocateMemory(u64 Address, u32 Size, void** ppRawMemory)
   if (ppRawMemory)
     *ppRawMemory = nullptr;
   void *pRawMemory = static_cast<void*>(new (std::nothrow) u8[Size]);
-  memset(pRawMemory, 0xfa, Size);
   if (pRawMemory == nullptr)
     return false;
+  memset(pRawMemory, 0xfa, Size);
   m_Memories.insert(MemoryChunk(Address, Size, pRawMemory));
   if (ppRawMemory)
     *ppRawMemory = pRawMemory;
@@ -97,10 +101,12 @@ bool MemoryContext::FreeMemory(u64 Address)
 
 bool MemoryContext::MapDocument(Document const& rDoc, CpuContext const* pCpuCtxt)
 {
-  for (auto itMemArea = rDoc.Begin(); itMemArea != rDoc.End(); ++itMemArea)
+  bool Res = true;
+  rDoc.ForEachMemoryArea([&](MemoryArea const& rMemArea)
   {
-    Address const& rMemAreaAddr = (*itMemArea)->GetBaseAddress();
-    u32 MemAreaSize             = (*itMemArea)->GetSize();
+    Address const& rMemAreaAddr = rMemArea.GetBaseAddress();
+    u32 MemAreaSize             = rMemArea.GetSize();
+    u32 MemAreaFileSize         = rMemArea.GetFileSize();
 
     void* pRawMemory;
     u64 LinearAddress;
@@ -108,24 +114,27 @@ bool MemoryContext::MapDocument(Document const& rDoc, CpuContext const* pCpuCtxt
       LinearAddress = rMemAreaAddr.GetOffset();
 
     if (AllocateMemory(LinearAddress, MemAreaSize, &pRawMemory) == false)
-      return false;
+    {
+      Res = false;
+      return;
+    }
+
+    // TODO: Do we have to zero-out memory?
+    if (MemAreaFileSize == 0x0)
+      return;
 
     TOffset MemAreaFileOff;
-    if ((*itMemArea)->ConvertOffsetToFileOffset(rMemAreaAddr.GetOffset(), MemAreaFileOff) == false)
-      continue;
+    if (rMemArea.ConvertOffsetToFileOffset(rMemAreaAddr.GetOffset(), MemAreaFileOff) == false)
+      return;
 
-    //TODO Use boolean method
-    try
-    {
-      rDoc.GetFileBinaryStream().Read(MemAreaFileOff, pRawMemory, MemAreaSize);
-    }
-    catch (Exception&)
+    if (!rDoc.GetBinaryStream().Read(MemAreaFileOff, pRawMemory, MemAreaFileSize))
     {
       FreeMemory(LinearAddress);
-      return false;
+      Res = false;
+      return;
     }
-  }
-  return true;
+  });
+  return Res;
 }
 
 std::string MemoryContext::ToString(void) const
@@ -134,18 +143,31 @@ std::string MemoryContext::ToString(void) const
     return "";
 
   std::ostringstream oss;
-  for (auto itMemChnk = std::begin(m_Memories); itMemChnk != std::end(m_Memories); ++itMemChnk)
-    oss << "laddr: " << std::hex << std::setw(16) << itMemChnk->m_LinearAddress << ", size: " << std::hex << std::setw(8) << std::setfill('0') << itMemChnk->m_Size << ", rawb: " << itMemChnk->m_Buffer << std::endl;
+  for (MemoryChunk const& rMemChnk : m_Memories)
+  {
+    oss << std::setfill('0') << "laddr: " << std::hex << std::setw(16) << rMemChnk.m_LinearAddress << ", size: " << std::hex << std::setw(8) << std::setfill('0') << rMemChnk.m_Size << ", rawb: " << rMemChnk.m_Buffer << std::endl;
+    u32 End  = rMemChnk.m_Size;
+    u64 Addr = rMemChnk.m_LinearAddress;
+    u8 const* pBuf = reinterpret_cast<u8 const*>(rMemChnk.m_Buffer);
+    for (u32 Cur = 0; Cur < End; Cur += 0x10)
+    {
+      Addr += 0x10;
+      oss << std::setw(16) << Addr << ":";
+      for (u32 Line = 0; Line < 16 && Cur + Line < End; ++Line)
+        oss << " " << std::setw(2) << static_cast<int>(pBuf[Cur + Line]);
+      oss << "\n";
+    }
+  }
   return oss.str();
 }
 
-bool MemoryContext::FindMemoryChunk(u64 LinearAddress, MemoryChunk& rMemChnk) const
+bool MemoryContext::FindMemoryChunk(u64 LinearAddress, MemoryChunk& rFoundMemChnk) const
 {
-  for (auto itMemChnk = std::begin(m_Memories); itMemChnk != std::end(m_Memories); ++itMemChnk)
+  for (MemoryChunk const& rMemChnk : m_Memories)
   {
-    if (LinearAddress >= itMemChnk->m_LinearAddress && LinearAddress < (itMemChnk->m_LinearAddress + itMemChnk->m_Size))
+    if (LinearAddress >= rMemChnk.m_LinearAddress && LinearAddress < (rMemChnk.m_LinearAddress + rMemChnk.m_Size))
     {
-      rMemChnk = *itMemChnk;
+      rFoundMemChnk = rMemChnk;
       return true;
     }
   }

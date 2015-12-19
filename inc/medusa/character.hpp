@@ -11,24 +11,17 @@ MEDUSA_NAMESPACE_BEGIN
 class Medusa_EXPORT Character : public Cell
 {
 public:
-  enum CharacterType
+  enum
   {
     UnknownCharacterType,
     AsciiCharacterType
   };
 
-  Character(CharacterType CharType = UnknownCharacterType)
-    : Cell(CellData::CharacterType, 1)
-    , m_CharType(CharType)
+  Character(u8 SubType = UnknownCharacterType, u16 Length = 1)
+    : Cell(Cell::CharacterType, SubType, Length)
   {}
 
-  Character(CellData::SPtr spDna, std::string const& rComment = "")
-    : Cell(spDna, rComment) {}
-
-  CharacterType GetCharacterType(void) const { return m_CharType; }
-
-private:
-  CharacterType m_CharType;
+  Character(CellData::SPtr spDna) : Cell(spDna) {}
 };
 
 MEDUSA_NAMESPACE_END

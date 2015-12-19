@@ -17,7 +17,7 @@ bool Avr8Architecture::Translate(Address const& rVirtAddr, TOffset& rPhysOff)
   return true;
 }
 
-bool Avr8Architecture::Disassemble(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn)
+bool Avr8Architecture::Disassemble(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode)
 {
   u8 Opcode1;
   bool Result;
@@ -52,39 +52,40 @@ bool Avr8Architecture::Disassemble(BinaryStream const& rBinStrm, TOffset Offset,
       Result = Insn_fxxx(rBinStrm, Offset, rInsn);  break;
     }
 
-  if (Result == true)
-  {
-    FormatOperand(rInsn.FirstOperand(),  Offset);
-    FormatOperand(rInsn.SecondOperand(), Offset);
-    FormatOperand(rInsn.ThirdOperand(),  Offset);
-    FormatOperand(rInsn.FourthOperand(), Offset);
-  }
+  //if (Result == true)
+  //{
+  //  FormatOperand(rInsn.FirstOperand(),  Offset);
+  //  FormatOperand(rInsn.SecondOperand(), Offset);
+  //  FormatOperand(rInsn.ThirdOperand(),  Offset);
+  //  FormatOperand(rInsn.FourthOperand(), Offset);
+  //}
   return Result;
 }
 
-void Avr8Architecture::FillConfigurationModel(ConfigurationModel& rCfgMdl)
+bool Avr8Architecture::FormatOperand(
+  Document      const& rDoc,
+  Address       const& rAddress,
+  Instruction   const& rInstruction,
+  Operand       const& rOperand,
+  u8                   OperandNo,
+  PrintData          & rPrintData) const
 {
-  Architecture::FillConfigurationModel(rCfgMdl);
-}
+  rPrintData.MarkOffset();
 
-void Avr8Architecture::FormatOperand(Operand& Op, TOffset Offset)
-{
-  std::ostringstream oss;
+  if (rOperand.GetType() & O_REG)
+    if (rOperand.GetReg() <= (sizeof(m_RegName) / sizeof(*m_RegName)))
+      rPrintData.AppendRegister(m_RegName[rOperand.GetReg()]);
 
-  if (Op.Type() & O_REG)
-    if (Op.Reg() <= (sizeof(m_RegName) / sizeof(*m_RegName)))
-      oss << m_RegName[Op.Reg()];
+  if (rOperand.GetType() & O_REL)
+    rPrintData.AppendImmediate(static_cast<s16>(rOperand.GetValue() & 0xffff), 16);
 
-  if (Op.Type() & O_REL)
-    oss << std::hex << std::showpos << static_cast<s16>(Op.Value() & 0xffff);
+  if (rOperand.GetType() & O_IMM)
+    rPrintData.AppendImmediate(rOperand.GetValue(), 16);
 
-  if (Op.Type() & O_IMM)
-    oss << "0x" << std::hex << Op.GetValue();
+  if (rOperand.GetType() & O_MEM  && rOperand.GetType() & O_DISP)
+    rPrintData.AppendSpace().AppendOperator("+").AppendSpace().AppendImmediate(rOperand.GetValue(), 16);
 
-  if (Op.Type() & O_MEM  && Op.Type() & O_DISP)
-    oss << "+" << std::hex << Op.GetValue();
-
-  Op.SetName(oss.str().c_str());
+  return true;
 }
 
 bool Avr8Architecture::Insn_axxx(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn)
@@ -143,34 +144,34 @@ bool Avr8Architecture::Insn_fxxx(BinaryStream const& rBinStrm, TOffset Offset, I
   else
     {
       Result = true;
-      rInsn.OperationType() = Instruction::OpJump;
+      rInsn.SubType() = Instruction::JumpType;
 
       if (!(Opcode1 & 0x0c))
       {
         switch (Opcode2 & 0x07)
         {
-        case 0x00: rInsn.Opcode() = AVR8_Brlo; rInsn.SetName("brlo"); rInsn.OperationType() |= Instruction::OpCond; break;
-        case 0x01: rInsn.Opcode() = AVR8_Breq; rInsn.SetName("breq"); rInsn.OperationType() |= Instruction::OpCond; break;
-        case 0x02: rInsn.Opcode() = AVR8_Brmi; rInsn.SetName("brmi"); rInsn.OperationType() |= Instruction::OpCond; break;
-        case 0x03: rInsn.Opcode() = AVR8_Brvs; rInsn.SetName("brvs"); rInsn.OperationType() |= Instruction::OpCond; break;
-        case 0x04: rInsn.Opcode() = AVR8_Brlt; rInsn.SetName("brlt"); rInsn.OperationType() |= Instruction::OpCond; break;
-        case 0x05: rInsn.Opcode() = AVR8_Brhs; rInsn.SetName("brhs"); rInsn.OperationType() |= Instruction::OpCond; break;
-        case 0x06: rInsn.Opcode() = AVR8_Brts; rInsn.SetName("brts"); rInsn.OperationType() |= Instruction::OpCond; break;
-        case 0x07: rInsn.Opcode() = AVR8_Brie; rInsn.SetName("brie"); rInsn.OperationType() |= Instruction::OpCond; break;
+        case 0x00: rInsn.Opcode() = AVR8_Brlo; rInsn.SetName("brlo"); rInsn.SubType() |= Instruction::ConditionalType; break;
+        case 0x01: rInsn.Opcode() = AVR8_Breq; rInsn.SetName("breq"); rInsn.SubType() |= Instruction::ConditionalType; break;
+        case 0x02: rInsn.Opcode() = AVR8_Brmi; rInsn.SetName("brmi"); rInsn.SubType() |= Instruction::ConditionalType; break;
+        case 0x03: rInsn.Opcode() = AVR8_Brvs; rInsn.SetName("brvs"); rInsn.SubType() |= Instruction::ConditionalType; break;
+        case 0x04: rInsn.Opcode() = AVR8_Brlt; rInsn.SetName("brlt"); rInsn.SubType() |= Instruction::ConditionalType; break;
+        case 0x05: rInsn.Opcode() = AVR8_Brhs; rInsn.SetName("brhs"); rInsn.SubType() |= Instruction::ConditionalType; break;
+        case 0x06: rInsn.Opcode() = AVR8_Brts; rInsn.SetName("brts"); rInsn.SubType() |= Instruction::ConditionalType; break;
+        case 0x07: rInsn.Opcode() = AVR8_Brie; rInsn.SetName("brie"); rInsn.SubType() |= Instruction::ConditionalType; break;
         }
       }
       else // ((Opcode1 & 0x0c) == 0x04)
         {
           switch (Opcode2 & 0x07)
             {
-            case 0x00: rInsn.Opcode() = AVR8_Brsh; rInsn.SetName("brsh"); rInsn.OperationType() |= Instruction::OpCond; break;
-            case 0x01: rInsn.Opcode() = AVR8_Brne; rInsn.SetName("brne"); rInsn.OperationType() |= Instruction::OpCond; break;
-            case 0x02: rInsn.Opcode() = AVR8_Brpl; rInsn.SetName("brpl"); rInsn.OperationType() |= Instruction::OpCond; break;
-            case 0x03: rInsn.Opcode() = AVR8_Brvc; rInsn.SetName("brvc"); rInsn.OperationType() |= Instruction::OpCond; break;
-            case 0x04: rInsn.Opcode() = AVR8_Brge; rInsn.SetName("brge"); rInsn.OperationType() |= Instruction::OpCond; break;
-            case 0x05: rInsn.Opcode() = AVR8_Brhc; rInsn.SetName("brhc"); rInsn.OperationType() |= Instruction::OpCond; break;
-            case 0x06: rInsn.Opcode() = AVR8_Brtc; rInsn.SetName("brtc"); rInsn.OperationType() |= Instruction::OpCond; break;
-            case 0x07: rInsn.Opcode() = AVR8_Brid; rInsn.SetName("brid"); rInsn.OperationType() |= Instruction::OpCond; break;
+            case 0x00: rInsn.Opcode() = AVR8_Brsh; rInsn.SetName("brsh"); rInsn.SubType() |= Instruction::ConditionalType; break;
+            case 0x01: rInsn.Opcode() = AVR8_Brne; rInsn.SetName("brne"); rInsn.SubType() |= Instruction::ConditionalType; break;
+            case 0x02: rInsn.Opcode() = AVR8_Brpl; rInsn.SetName("brpl"); rInsn.SubType() |= Instruction::ConditionalType; break;
+            case 0x03: rInsn.Opcode() = AVR8_Brvc; rInsn.SetName("brvc"); rInsn.SubType() |= Instruction::ConditionalType; break;
+            case 0x04: rInsn.Opcode() = AVR8_Brge; rInsn.SetName("brge"); rInsn.SubType() |= Instruction::ConditionalType; break;
+            case 0x05: rInsn.Opcode() = AVR8_Brhc; rInsn.SetName("brhc"); rInsn.SubType() |= Instruction::ConditionalType; break;
+            case 0x06: rInsn.Opcode() = AVR8_Brtc; rInsn.SetName("brtc"); rInsn.SubType() |= Instruction::ConditionalType; break;
+            case 0x07: rInsn.Opcode() = AVR8_Brid; rInsn.SetName("brid"); rInsn.SubType() |= Instruction::ConditionalType; break;
             }
         }
 
@@ -433,7 +434,7 @@ bool Avr8Architecture::Insn_94xx(BinaryStream const& rBinStrm, TOffset Offset, I
       switch (Opcode2)
         {
         case 0x08: rInsn.Opcode() = AVR8_Ret;    rInsn.SetName("ret");    Result = true;
-                   rInsn.OperationType() = Instruction::OpRet;                           break;
+                   rInsn.SubType() = Instruction::ReturnType;                           break;
         case 0x09: rInsn.Opcode() = AVR8_Icall;  rInsn.SetName("icall");  Result = true; break;
         case 0x11: rInsn.Opcode() = AVR8_Eicall; rInsn.SetName("eicall"); Result = true; break;
         case 0x18: rInsn.Opcode() = AVR8_Reti;   rInsn.SetName("reti");   Result = true; break;
@@ -479,13 +480,13 @@ bool Avr8Architecture::Insn_94xx(BinaryStream const& rBinStrm, TOffset Offset, I
         {
           rInsn.Opcode() = AVR8_Jmp;
           rInsn.SetName("jmp");
-          rInsn.OperationType() = Instruction::OpJump;
+          rInsn.SubType() = Instruction::JumpType;
         }
       else if ((Opcode2 & 0x0e) == 0x0e)
         {
           rInsn.Opcode() = AVR8_Call;
           rInsn.SetName("call");
-          rInsn.OperationType() = Instruction::OpCall;
+          rInsn.SubType() = Instruction::CallType;
         }
 
       u8 Addr3, Addr4;
@@ -887,7 +888,7 @@ bool Avr8Architecture::Insn_Rcall(BinaryStream const& rBinStrm, TOffset Offset, 
 {
   u8 Opcode1, Opcode2;
 
-  rInsn.OperationType() = Instruction::OpCall;
+  rInsn.SubType() = Instruction::CallType;
   rInsn.Opcode() = AVR8_Rcall;
   rInsn.Length() = 2;
   rInsn.SetName("rcall");
@@ -913,7 +914,7 @@ bool Avr8Architecture::Insn_Rjmp(BinaryStream const& rBinStrm, TOffset Offset, I
 {
   u8 Opcode1, Opcode2;
 
-  rInsn.OperationType() = Instruction::OpJump;
+  rInsn.SubType() = Instruction::JumpType;
   rInsn.Opcode() = AVR8_Rjmp;
   rInsn.Length() = 2;
   rInsn.SetName("rjmp");

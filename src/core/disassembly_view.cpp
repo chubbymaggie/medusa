@@ -2,322 +2,617 @@
 
 #include <algorithm>
 
+#include <boost/algorithm/string.hpp>
 #include <boost/thread/mutex.hpp>
 #include <boost/thread/locks.hpp>
 #include <boost/thread.hpp>
 
 MEDUSA_NAMESPACE_USE;
 
-DisassemblyView::DisassemblyView(Medusa& rCore, Printer* pPrinter, u32 PrinterFlags, Address::List const& rAddresses)
+Appearance::MapType& Appearance::GetColors(void)
+{
+  static MapType s_Colors;
+  if (s_Colors.empty())
+  {
+    s_Colors["color.background_listing"] = Information("Background listing", "");
+    s_Colors["color.background_address"] = Information("Background address", "");
+    s_Colors["color.instruction_mnemonic"] = Information("Instruction mnemonic", "");
+    s_Colors["color.instruction_register"] = Information("Instruction register", "");
+    s_Colors["color.instruction_immediate"] = Information("Instruction immediate", "");
+    s_Colors["color.comment"] = Information("Comment", "");
+    s_Colors["color.selection"] = Information("Selection", "");
+    s_Colors["color.operator"] = Information("Operator", "");
+    s_Colors["color.keyword"] = Information("Keyword", "");
+    s_Colors["color.label"] = Information("Label", "");
+    s_Colors["color.string"] = Information("String", "");
+  }
+
+  return s_Colors;
+}
+
+Appearance::MapType& Appearance::GetFonts(void)
+{
+  static MapType s_Fonts;
+  if (s_Fonts.empty())
+  {
+    s_Fonts["font.listing"] = Information("Listing", "");
+  }
+
+  return s_Fonts;
+}
+
+void FormatDisassembly::operator()(Address const& rAddress, u32 Flags, u16 LinesNo)
+{
+  m_rPrintData.Clear();
+  m_rPrintData.PrependAddress(Flags & ShowAddress ? true : false);
+
+  auto& rDoc = m_rCore.GetDocument();
+  Address CurAddr = rAddress;
+
+  for (u16 i = 0; i < LinesNo; ++i)
+  {
+    _Format(CurAddr, Flags);
+
+    if (!rDoc.GetNextAddress(CurAddr, CurAddr))
+      return;
+  }
+}
+
+void FormatDisassembly::operator()(Address::List const& rAddresses, u32 Flags)
+{
+  m_rPrintData.Clear();
+
+  if (rAddresses.empty())
+    return;
+
+  m_rPrintData.PrependAddress(Flags & ShowAddress ? true : false);
+
+  for (auto const& CurAddr : rAddresses)
+    _Format(CurAddr, Flags);
+}
+
+void FormatDisassembly::operator()(std::pair<Address const&, Address const&> const& rAddressesRange, u32 Flags)
+{
+  auto& rDoc          = m_rCore.GetDocument();
+  Address CurAddr     = std::get<0>(rAddressesRange);
+  auto const& LastAddr = std::get<1>(rAddressesRange);
+
+  if (CurAddr == LastAddr)
+  {
+    _Format(CurAddr, Flags);
+    return;
+  }
+
+  while (!(CurAddr == LastAddr))
+  {
+    _Format(CurAddr, Flags);
+
+    if (!rDoc.GetNextAddress(CurAddr, CurAddr))
+      return;
+  }
+}
+
+void FormatDisassembly::_Format(Address const& rAddress, u32 Flags)
+{
+  auto& rDoc = m_rCore.GetDocument();
+
+  m_rPrintData(rAddress);
+
+  // Header
+  if (rDoc.GetStartAddress() == rAddress)
+  {
+    m_rPrintData(rAddress);
+    _FormatHeader(rAddress, Flags);
+  }
+
+  // MemoryArea
+  auto pMemArea = rDoc.GetMemoryArea(rAddress);
+  if (pMemArea != nullptr && pMemArea->GetBaseAddress() == rAddress)
+  {
+    _FormatMemoryArea(rAddress, Flags);
+    m_rPrintData.AppendNewLine();
+  }
+
+  // XRefs
+  if (rDoc.HasCrossReferenceFrom(rAddress))
+  {
+    if (Flags & AddSpaceBeforeXref)
+      m_rPrintData.AppendNewLine();
+
+    _FormatXref(rAddress, Flags);
+    m_rPrintData.AppendNewLine();
+  }
+
+  // Label
+  auto rLbl = rDoc.GetLabelFromAddress(rAddress);
+  if (rLbl.GetType() != Label::Unknown)
+  {
+    _FormatLabel(rAddress, Flags);
+    m_rPrintData.AppendNewLine();
+  }
+
+  // Multicell
+  if (rDoc.GetMultiCell(rAddress) != nullptr)
+  {
+    _FormatMultiCell(rAddress, Flags);
+    m_rPrintData.AppendNewLine();
+  }
+
+  if (rDoc.GetCell(rAddress) != nullptr)
+  {
+    _FormatCell(rAddress, Flags);
+    m_rPrintData.AppendNewLine();
+  }
+}
+
+void FormatDisassembly::_FormatHeader(Address const& rAddress, u32 Flags)
+{
+  m_rPrintData.AppendComment(";; File disassembled with ").AppendComment(Medusa::GetVersion()).AppendNewLine();
+  m_rPrintData.AppendComment(";; website: https://github.com/wisk/medusa ").AppendNewLine();
+  // TODO: filename
+  m_rPrintData.AppendComment(";; SHA1: ").AppendComment(m_rCore.GetDocument().GetBinaryStream().GetSha1());
+  m_rPrintData.AppendNewLine().AppendNewLine();
+}
+
+void FormatDisassembly::_FormatAddress(Address const& rAddress, u32 Flags)
+{
+  if (rAddress.GetBase() != 0x0 && rAddress.GetBaseSize() != 0x0)
+    m_rPrintData.AppendImmediate(rAddress.GetBase(), rAddress.GetBaseSize()).AppendOperator(":");
+  m_rPrintData.AppendImmediate(rAddress.GetOffset(), rAddress.GetOffsetSize()).AppendSpace(8);
+}
+
+void FormatDisassembly::_FormatCell(Address const& rAddress, u32 Flags)
+{
+  m_rPrintData.AppendSpace(4);
+  auto pCell = m_rCore.GetCell(rAddress);
+  if (pCell == nullptr)
+    m_rPrintData.AppendComment(";; invalid cell!");
+  else
+    m_rCore.FormatCell(rAddress, *pCell, m_rPrintData);
+
+  std::string Cmt;
+  u16 CurTextWidth = static_cast<u16>(m_rPrintData.GetCurrentText().length()) + 1;
+  if (Flags & ShowAddress)
+    CurTextWidth -= static_cast<u16>((rAddress.ToString().length() + 9));
+  if (m_rCore.GetDocument().GetComment(rAddress, Cmt))
+  {
+    std::vector<std::string> CmtLines;
+    boost::split(CmtLines, Cmt, boost::is_any_of("\n"));
+    auto itCmtLine = std::begin(CmtLines), itCmtLineEnd = std::end(CmtLines);
+    if (itCmtLine == itCmtLineEnd)
+      return;
+    m_rPrintData.AppendSpace(1).AppendComment(";").AppendSpace().AppendComment(*itCmtLine);
+    ++itCmtLine;
+    for (; itCmtLine != itCmtLineEnd; ++itCmtLine)
+      m_rPrintData.AppendNewLine().AppendSpace(CurTextWidth + 1).AppendComment(";").AppendSpace().AppendComment(*itCmtLine);
+  }
+}
+
+void FormatDisassembly::_FormatMultiCell(Address const& rAddress, u32 Flags)
+{
+  m_rPrintData.AppendSpace(2);
+  auto pMultiCell = m_rCore.GetMultiCell(rAddress);
+  if (pMultiCell == nullptr)
+    m_rPrintData.AppendComment(";; invalid multicell!");
+  else
+    m_rCore.FormatMultiCell(rAddress, *pMultiCell, m_rPrintData);
+}
+
+void FormatDisassembly::_FormatLabel(Address const& rAddress, u32 Flags)
+{
+  auto Lbl = m_rCore.GetDocument().GetLabelFromAddress(rAddress);
+  if (Lbl.GetType() == Label::Unknown)
+    m_rPrintData.AppendComment(";; invalid label!");
+  else
+    m_rPrintData.AppendLabel(Lbl.GetLabel()).AppendOperator(":");
+}
+
+void FormatDisassembly::_FormatXref(Address const& rAddress, u32 Flags)
+{
+  Address::List AddrFrom;
+  std::list<std::string> AddrFromStr;
+  m_rCore.GetDocument().GetCrossReferenceFrom(rAddress, AddrFrom);
+  for (auto const& rAddr : AddrFrom)
+    AddrFromStr.push_back(rAddr.ToString());
+  std::string Buffer = "; xref: " + boost::algorithm::join(AddrFromStr, ", ");
+  m_rPrintData.AppendComment(Buffer);
+}
+
+void FormatDisassembly::_FormatMemoryArea(Address const& rAddress, u32 Flags)
+{
+  m_rPrintData.AppendNewLine();
+  auto pMemArea = m_rCore.GetDocument().GetMemoryArea(rAddress);
+  if (pMemArea == nullptr)
+    m_rPrintData.AppendComment(";; invalid memory area!");
+  else
+    m_rPrintData.AppendComment(pMemArea->ToString());
+}
+
+DisassemblyView::DisassemblyView(Medusa& rCore, u32 FormatFlags, Address const& rAddress)
   : View(Document::Subscriber::DocumentUpdated, rCore.GetDocument())
   , m_rCore(rCore)
-  , m_pPrinter(pPrinter), m_PrinterFlags(PrinterFlags)
-  , m_Addresses(rAddresses)
-  , m_Width(), m_Height()
+  , m_FormatFlags(FormatFlags)
+  , m_Format(rCore, m_PrintData)
 {
-  _Prepare();
 }
 
 DisassemblyView::~DisassemblyView(void)
 {
-  boost::mutex::scoped_lock Lock(m_Mutex);
-  delete m_pPrinter;
-}
 
-void DisassemblyView::Refresh(void)
-{
-  boost::mutex::scoped_lock Lock(m_Mutex);
-
-  _Prepare();
-}
-
-void DisassemblyView::Print(void)
-{
-  u32 LineNo;
-  u32 yOffset = 0;
-
-  boost::mutex::scoped_lock Lock(m_Mutex);
-
-  for (auto itAddr = std::begin(m_Addresses); itAddr != std::end(m_Addresses); ++itAddr)
-  {
-    LineNo = (*m_pPrinter)(*itAddr, 0, yOffset, m_PrinterFlags);
-    if (LineNo == 0)
-      return;
-    yOffset += LineNo;
-  }
 }
 
 bool DisassemblyView::GetAddressFromPosition(Address& rAddress, u32 xPos, u32 yPos) const
 {
-  boost::mutex::scoped_lock Lock(m_Mutex);
-
-  if (yPos >= m_Addresses.size())
+  u16 Off;
+  LineData Line;
+  if (!m_PrintData.GetLine(yPos, Off, Line))
     return false;
 
-  auto itAddr = m_Addresses.begin();
-  while (yPos--)
-    ++itAddr;
-
-  rAddress = *itAddr;
+  rAddress = Line.GetAddress();
   return true;
-}
-
-void DisassemblyView::_Prepare(void)
-{
-  m_Height = 0;
-  m_Width  = 0;
-  for (auto itAddr = std::begin(m_Addresses); itAddr != std::end(m_Addresses); ++itAddr)
-  {
-    m_Height += m_pPrinter->GetLineHeight(*itAddr, m_PrinterFlags);
-    m_Width   = std::max(m_Width, static_cast<u32>(m_pPrinter->GetLineWidth(*itAddr, m_PrinterFlags)));
-  }
 }
 
 void DisassemblyView::GetDimension(u32& rWidth, u32& rHeight) const
 {
-  rWidth  = m_Width;
-  rHeight = m_Height;
+  rWidth  = m_PrintData.GetWidth();
+  rHeight = m_PrintData.GetHeight();
 }
 
-FullDisassemblyView::FullDisassemblyView(Medusa& rCore, Printer* pPrinter, u32 PrinterFlags, u32 Width, u32 Height, Address const& rAddress)
+FullDisassemblyView::FullDisassemblyView(Medusa& rCore, u32 FormatFlags, u32 Width, u32 Height, Address const& rAddress)
   : View(Document::Subscriber::DocumentUpdated, rCore.GetDocument())
   , m_rCore(rCore)
-  , m_pPrinter(pPrinter), m_PrinterFlags(PrinterFlags)
+  , m_FormatFlags(FormatFlags)
+  , m_Format(rCore, m_PrintData)
+  , m_Top(rAddress)
   , m_Cursor(rAddress)
   , m_SelectionBegin(), m_SelectionEnd()
-  , m_Offset(), m_Width(Width), m_Height(Height)
+  , m_Width(Width), m_Height(Height)
 {
-  _Prepare(rAddress);
 }
 
 FullDisassemblyView::~FullDisassemblyView(void)
 {
-  boost::mutex::scoped_lock Lock(m_Mutex);
-  delete m_pPrinter;
 }
 
 Cell::SPtr FullDisassemblyView::GetCellFromPosition(u32 xChar, u32 yChar)
 {
-  Address CellAddr;
+  std::lock_guard<MutexType> Lock(m_Mutex);
 
-  if (GetAddressFromPosition(CellAddr, xChar, yChar) == false)
+  u16 Off;
+  LineData Line;
+  if (!m_PrintData.GetLine(yChar, Off, Line))
     return nullptr;
 
-  return m_rCore.GetCell(CellAddr);
+  return m_rDoc.GetCell(Line.GetAddress());
 }
 
 Cell::SPtr const FullDisassemblyView::GetCellFromPosition(u32 xChar, u32 yChar) const
 {
-  Address CellAddr;
+  std::lock_guard<MutexType> Lock(m_Mutex);
 
-  if (GetAddressFromPosition(CellAddr, xChar, yChar) == false)
+  u16 Off;
+  LineData Line;
+  if (!m_PrintData.GetLine(yChar, Off, Line))
     return nullptr;
 
-  return m_rCore.GetCell(CellAddr);
+  return m_rDoc.GetCell(Line.GetAddress());
 }
 
 void FullDisassemblyView::GetDimension(u32& rWidth, u32& rHeight) const
 {
-  rWidth  = m_Width;
-  rHeight = m_Height;
-}
-
-void FullDisassemblyView::Refresh(void)
-{
-  boost::mutex::scoped_lock Lock(m_Mutex);
-
-  if (m_VisiblesAddresses.empty())
-    return;
-  auto FirstAddr = *m_VisiblesAddresses.begin();
-  _Prepare(FirstAddr);
+  std::lock_guard<MutexType> Lock(m_Mutex);
+  rWidth = m_Width; rHeight = m_Height;
 }
 
 void FullDisassemblyView::Resize(u32 Width, u32 Height)
 {
-  m_Width  = Width;
-  m_Height = Height;
-}
-
-void FullDisassemblyView::Print(void)
-{
-  boost::mutex::scoped_lock Lock(m_Mutex);
-
-  if (m_VisiblesAddresses.empty())
-    return;
-
-  u32 LineNo;
-  u32 yOffset = 0;
-
-  m_Width = 0;
-
-  for (auto itAddr = std::begin(m_VisiblesAddresses); itAddr != std::end(m_VisiblesAddresses);)
   {
-    LineNo = (*m_pPrinter)(*itAddr, m_Offset, yOffset, m_PrinterFlags);
-    m_Width = std::max(m_Width, static_cast<u32>(m_pPrinter->GetLineWidth(*itAddr, m_PrinterFlags)));
-    if (LineNo == 0)
-      return;
-    yOffset += LineNo;
-    while (LineNo-- && itAddr != std::end(m_VisiblesAddresses))
-      ++itAddr;
+    std::lock_guard<MutexType> Lock(m_Mutex);
+
+    m_Width  = Width;
+    m_Height = Height;
   }
+  Refresh();
 }
 
-bool FullDisassemblyView::Scroll(s32 xOffset, s32 yOffset)
+void FullDisassemblyView::Refresh(void)
 {
-  s32 NewOffset = m_Offset + xOffset;
-  if (NewOffset < 0)
-    m_Offset = 0;
+  std::lock_guard<MutexType> Lock(m_Mutex);
+
+  m_Format(m_Top.m_Address, m_FormatFlags, m_Height + m_Top.m_yAddressOffset);
+}
+
+bool FullDisassemblyView::MoveView(s32 xOffset, s32 yOffset)
+{
+  std::lock_guard<MutexType> Lock(m_Mutex);
+
+  // We start to update the x offset
+  s32 xNewOffset = m_Top.m_xAddressOffset + xOffset;
+  m_Top.m_xAddressOffset = (xNewOffset < 0) ? 0 : xNewOffset;
+
+  if (yOffset == 0)
+    return true;
+
+  // Is this case, we don't need to find a new address
+  u16 CurLineNo = m_PrintData.GetLineNo(m_Top.m_Address);
+  s32 yNewOffset = static_cast<s32>(m_Top.m_yAddressOffset) + yOffset;
+  if (yNewOffset >= 0 && yNewOffset < static_cast<s32>(CurLineNo))
+  {
+    m_Top.m_yAddressOffset = static_cast<u16>(yNewOffset);
+    return true;
+  }
+
+  auto const& rDoc = m_rCore.GetDocument();
+
+  Address NewAddr;
+  if (!rDoc.MoveAddress(m_Top.m_Address, NewAddr, yOffset))
+    return false;
+  m_Format(NewAddr, m_FormatFlags, m_Height);
+
+  if (yOffset < 0)
+    m_Top.m_yAddressOffset = (m_Top.m_Address == m_rDoc.GetFirstAddress()) ? 0 : m_PrintData.GetLineNo(NewAddr) - 1;
   else
-    m_Offset = NewOffset;
+    m_Top.m_yAddressOffset = 0;
 
-  if (yOffset)
-  {
-    boost::mutex::scoped_lock Lock(m_Mutex);
-
-    if (m_VisiblesAddresses.empty())
-      return false;
-
-    Address NewAddress = m_VisiblesAddresses.front();
-    if (m_rCore.GetDocument().MoveAddress(NewAddress, NewAddress, yOffset) == false)
-      return false;
-
-    _Prepare(NewAddress);
-  }
+  m_Top.m_Address = NewAddr;
 
   return true;
 }
 
-bool FullDisassemblyView::MoveCursor(s32 xOffset, s32 yOffset)
+bool FullDisassemblyView::MoveCursor(s32 xOffset, s32 yOffset, bool& rInvalidateView)
 {
+  rInvalidateView = false;
+  auto const& rDoc = m_rCore.GetDocument();
+
+  std::lock_guard<MutexType> Lock(m_Mutex);
+
+  // We start to update the x offset.
+  s32 xNewOffset = m_Cursor.m_xAddressOffset + xOffset;
+  m_Cursor.m_xAddressOffset = (xNewOffset < 0) ? 0 : xNewOffset;
+
+  // If yOffset is 0, we can return now.
+  if (yOffset == 0)
+    return true;
+
+  // If we move the cursor in the same cell, we can simply update y offset.
+  u16 CurLineNo = m_PrintData.GetLineNo(m_Cursor.m_Address);
+  if (CurLineNo)
   {
-    boost::mutex::scoped_lock Lock(m_Mutex);
-
-    m_Cursor.m_xOffset += xOffset;
-
-
-    u16 LineHeight = m_pPrinter->GetLineHeight(m_Cursor.m_Address, m_PrinterFlags);
-
-    if (yOffset > 0)
+    s32 yNewOffset = static_cast<s32>(m_Cursor.m_yAddressOffset) + yOffset;
+    if (yNewOffset >= 0 && yNewOffset < static_cast<s32>(CurLineNo))
     {
-      while (yOffset--)
+      m_Cursor.m_yAddressOffset = static_cast<u16>(yNewOffset);
+      if (m_Cursor.m_yAddressOffset < m_Top.m_yAddressOffset)
       {
-        m_Cursor.m_yOffset++;
-        if (m_Cursor.m_yOffset > LineHeight)
-        {
-          m_rDoc.MoveAddress(m_Cursor.m_Address, m_Cursor.m_Address, 1);
-          m_Cursor.m_yOffset = 0;
-          LineHeight = m_pPrinter->GetLineHeight(m_Cursor.m_Address, m_PrinterFlags);
-        }
+        m_Top.m_yAddressOffset = m_Cursor.m_yAddressOffset;
+        rInvalidateView = true;
       }
-    }
-    else if (yOffset < 0)
-    {
-      while (yOffset++)
-      {
-        if (m_Cursor.m_yOffset == 0x0)
-        {
-          m_rDoc.MoveAddress(m_Cursor.m_Address, m_Cursor.m_Address, -1);
-          LineHeight = m_pPrinter->GetLineHeight(m_Cursor.m_Address, m_PrinterFlags);
-          m_Cursor.m_yOffset = LineHeight;
-        }
-
-        m_Cursor.m_yOffset--;
-      }
+      return true;
     }
   }
 
-  return EnsureCursorIsVisible();
+  Address FirstAddr = rDoc.GetFirstAddress();
+  Address NewAddr = m_Cursor.m_Address;
+  while (yOffset != 0)
+  {
+    u16 CurLineNo = m_PrintData.GetLineNo(NewAddr);
+
+    // move view backward
+    if (yOffset < 0)
+    {
+      // If the cursor is at top, we can return true now.
+      if (NewAddr == FirstAddr && m_Cursor.m_yAddressOffset == 0)
+      {
+        m_Top.m_Address = NewAddr;
+        m_Top.m_yAddressOffset = 0;
+        rInvalidateView = true;
+        return true;
+      }
+
+      // If the current address is out of the view, we must update it.
+      if ( CurLineNo == 0
+        || m_Cursor.m_yAddressOffset == 0
+        || m_Cursor.m_yAddressOffset >= CurLineNo)
+      {
+        // Get the previous address.
+        if (!rDoc.MoveAddress(NewAddr, NewAddr, -1))
+          return false;
+
+        u16 NewLineNo = 0;
+
+        // Update the view if needed.
+        if (!m_PrintData.Contains(NewAddr))
+        {
+          m_Top.m_Address = NewAddr;
+          m_Format(NewAddr, m_FormatFlags, m_Height);
+          NewLineNo = m_PrintData.GetLineNo(NewAddr);
+          if (NewLineNo == 0)
+            return false;
+          m_Top.m_yAddressOffset = NewLineNo - 1;
+          rInvalidateView = true;
+        }
+
+        if (NewLineNo == 0)
+          if ((NewLineNo = m_PrintData.GetLineNo(NewAddr)) == 0)
+            return false;
+
+        m_Cursor.m_yAddressOffset = NewLineNo - 1;
+      }
+      else
+        --m_Cursor.m_yAddressOffset;
+
+      ++yOffset;
+
+    }
+
+    // move view forward
+    else
+    {
+      u16 Off;
+      if (!m_PrintData.GetLineOffset(m_Cursor.m_Address, Off))
+        return false;
+      Off += (m_Cursor.m_yAddressOffset - m_Top.m_yAddressOffset + 2);
+      if (Off > m_Height)
+      {
+        u16 MoveOff = Off - m_Height;
+        if (!MoveView(0, MoveOff))
+          return false;
+        rInvalidateView = true;
+      }
+
+      if (m_Cursor.m_yAddressOffset == CurLineNo - 1)
+      {
+        if (!rDoc.MoveAddress(NewAddr, NewAddr, 1))
+          return false;
+
+        // Move the view until we reach the new address.
+        while (!m_PrintData.Contains(NewAddr))
+        {
+          if (!MoveView(0, 1))
+            return false;
+          rInvalidateView = true;
+        }
+
+        m_Cursor.m_yAddressOffset = 0;
+      }
+      else
+        ++m_Cursor.m_yAddressOffset;
+
+      --yOffset;
+    }
+  }
+
+  m_Cursor.m_Address = NewAddr;
+
+  if (yOffset == 0)
+    return true;
+
+  if (yOffset < 0)
+    m_Cursor.m_yAddressOffset = (m_Cursor.m_Address == m_rDoc.GetFirstAddress()) ? 0 : m_PrintData.GetLineNo(NewAddr) - 1;
+  else
+    m_Cursor.m_yAddressOffset = 0;
+
+  return true;
 }
 
-bool FullDisassemblyView::SetCursor(u32 xOffset, u32 yOffset)
+bool FullDisassemblyView::SetCursor(u32 xPosition, u32 yPosition)
 {
-  if (xOffset != -1)
-    m_Cursor.m_xOffset = xOffset;
+  std::lock_guard<MutexType> Lock(m_Mutex);
 
-  if (yOffset != -1)
+  if (yPosition != -1)
   {
-    boost::mutex::scoped_lock Lock(m_Mutex);
-
-    if (yOffset > m_VisiblesAddresses.size())
+    u16 Off;
+    LineData Line;
+    if (!m_PrintData.GetLine(yPosition + m_Top.m_yAddressOffset, Off, Line))
       return false;
 
-    auto itAddr = std::begin(m_VisiblesAddresses);
-    std::advance(itAddr, yOffset);
-    if (itAddr == std::end(m_VisiblesAddresses))
-      return false;
-
-    m_Cursor.m_Address = *itAddr;
-
-    u32 yOffset = 0;
-    while (itAddr != std::begin(m_VisiblesAddresses) && *(--itAddr) == m_Cursor.m_Address)
-      ++yOffset;
-    m_Cursor.m_yOffset = yOffset;
+    m_Cursor.m_Address = Line.GetAddress();
+    m_Cursor.m_yAddressOffset = Off;
   }
 
-  return EnsureCursorIsVisible();
+  if (xPosition != -1)
+  {
+    m_Cursor.m_xAddressOffset = xPosition;
+    if (m_Cursor.m_xAddressOffset > m_Width)
+      m_Cursor.m_xAddressOffset = m_Width;
+  }
+  return true;
+}
+
+bool FullDisassemblyView::MoveSelection(s32 xOffset, s32 yOffset, bool& rInvalidateView)
+{
+  if (!MoveCursor(xOffset, yOffset, rInvalidateView))
+    return false;
+  m_SelectionEnd = m_Cursor;
+  return true;
+}
+
+bool FullDisassemblyView::SetSelection(u32 xOffset, u32 yOffset)
+{
+  if (!SetCursor(xOffset, yOffset))
+    return false;
+  m_SelectionEnd = m_Cursor;
+  return true;
 }
 
 bool FullDisassemblyView::GoTo(Address const& rAddress)
 {
-  boost::mutex::scoped_lock Lock(m_Mutex);
-  m_Cursor.m_Address = rAddress;
-  _Prepare(rAddress);
-  return m_VisiblesAddresses.empty() ? false : true;
-}
+  auto& rDoc = m_rCore.GetDocument();
 
-void FullDisassemblyView::_Prepare(Address const& rAddress)
-{
-  auto const& rDoc = m_rCore.GetDocument();
-  u32 NumberOfAddress = m_Height;
-  Address CurrentAddress;
+  Address TopAddr;
+  if (!rDoc.GetNearestAddress(rAddress, TopAddr))
+    return false;
 
-  if (m_VisiblesAddresses.empty() == false)
-    m_VisiblesAddresses.clear();
+  std::lock_guard<MutexType> Lock(m_Mutex);
 
-  if (NumberOfAddress == 0)
-    return;
+  m_Top.m_Address = TopAddr;
+  m_Top.m_yAddressOffset = 0;
 
-  if (rDoc.GetNearestAddress(rAddress, CurrentAddress) == false)
-    return;
+  rDoc.InsertAddressInHistory(TopAddr);
 
-  while (NumberOfAddress--)
-  {
-    u32 NumberOfLine = m_pPrinter->GetLineHeight(CurrentAddress, m_PrinterFlags);
-
-    if (NumberOfLine == 0)
-      continue;
-
-    while (NumberOfLine--)
-      m_VisiblesAddresses.push_back(CurrentAddress);
-
-    if (rDoc.GetNextAddress(CurrentAddress, CurrentAddress) == false)
-      return;
-  }
+  return true;
 }
 
 bool FullDisassemblyView::GetAddressFromPosition(Address& rAddress, u32 xPos, u32 yPos) const
 {
-  boost::mutex::scoped_lock Lock(m_Mutex);
-  if (yPos >= m_VisiblesAddresses.size())
+  std::lock_guard<MutexType> Lock(m_Mutex);
+
+  u16 Off;
+  LineData Line;
+  if (!m_PrintData.GetLine(yPos, Off, Line))
     return false;
-
-  auto itAddr = m_VisiblesAddresses.begin();
-  while (yPos--)
-    ++itAddr;
-
-  rAddress = *itAddr;
+  rAddress = Line.GetAddress();
   return true;
 }
 
-bool FullDisassemblyView::EnsureCursorIsVisible(void)
+void FullDisassemblyView::BeginSelection(u32 x, u32 y)
 {
-  boost::mutex::scoped_lock Lock(m_Mutex);
-  if (m_VisiblesAddresses.empty())
+  _ConvertViewOffsetToAddressOffset(m_SelectionBegin, x, y);
+}
+
+void FullDisassemblyView::EndSelection(u32 x, u32 y)
+{
+  _ConvertViewOffsetToAddressOffset(m_SelectionEnd, x, y);
+  SetCursor(x, y);
+}
+
+void FullDisassemblyView::ResetSelection(void)
+{
+  std::lock_guard<MutexType> Lock(m_Mutex);
+
+  m_SelectionBegin = m_SelectionEnd = m_Cursor;
+}
+
+u8 FullDisassemblyView::GetSelectionIndex(void) const
+{
+  u8 Index;
+  if (!m_PrintData.GetOperandNo(m_SelectionEnd.m_Address, m_SelectionEnd.m_xAddressOffset, m_SelectionEnd.m_yAddressOffset, Index))
+    return 0xff;
+  return Index;
+}
+
+bool FullDisassemblyView::_ConvertViewOffsetToAddressOffset(TextPosition& rTxtPos, u32 x, u32 y) const
+{
+  std::lock_guard<MutexType> Lock(m_Mutex);
+
+  u16 Off;
+  LineData Line;
+  if (!m_PrintData.GetLine(y, Off, Line))
     return false;
+  rTxtPos = Line.GetAddress();
+  rTxtPos.m_xAddressOffset = x;
+  rTxtPos.m_yAddressOffset = Off;
+  return true;
+}
 
-  if (m_Cursor.m_Address >= m_VisiblesAddresses.front() && m_Cursor.m_Address <= m_VisiblesAddresses.back())
-    return true;
+bool FullDisassemblyView::_ConvertAddressOffsetToViewOffset(TextPosition const& rTxtPos, u32& x, u32& y) const
+{
+  std::lock_guard<MutexType> Lock(m_Mutex);
 
-  _Prepare(m_Cursor.m_Address);
-  return m_VisiblesAddresses.empty() ? false : true;
+  u16 Offset;
+  if (!m_PrintData.GetLineOffset(rTxtPos.m_Address, Offset))
+    return false;
+  x = rTxtPos.m_xAddressOffset;
+  y = rTxtPos.m_yAddressOffset + Offset - m_Top.m_yAddressOffset;
+  return true;
 }

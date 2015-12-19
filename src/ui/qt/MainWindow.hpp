@@ -12,10 +12,9 @@
 # include <medusa/medusa.hpp>
 # include "ui_MainWindow.h"
 # include "About.hpp"
-# include "OpenConfirmation.hpp"
-# include "LoaderChooser.hpp"
 # include "LabelView.hpp"
 # include "ScrollbarAddress.hpp"
+# include "MemoryAreaView.hpp"
 
 # include "DisassemblyView.hpp"
 # include "SemanticView.hpp"
@@ -39,10 +38,11 @@ public:
 
 public:
   bool        openDocument();
+  bool        loadDocument();
   bool        saveDocument();
   bool        closeDocument();
 
-  void        appendLog(std::wstring const & msg);
+  void        appendLog(std::string const & msg);
 
 public slots:
   void        addDisassemblyView(medusa::Address const& startAddr);
@@ -51,6 +51,7 @@ public slots:
 
   void        on_actionAbout_triggered();
   void        on_actionOpen_triggered();
+  void        on_actionLoad_triggered();
   void        on_actionSave_triggered();
   void        on_actionClose_triggered();
   void        on_actionGoto_triggered();
@@ -60,6 +61,7 @@ public slots:
   void        onLogMessageAppended(QString const & msg);
 
   void        goTo(medusa::Address const& addr);
+  void        setCurrentAddress(medusa::Address const& addr);
 
 signals:
   void        DisassemblyViewAdded(medusa::Address const& startAddr);
@@ -69,13 +71,14 @@ signals:
   void        logAppended(QString const & msg);
   void        addNewView(medusa::Address const& addr);
 
+  void        lastAddressUpdated(medusa::Address const& addr);
+
 protected:
   void        closeEvent(QCloseEvent * event);
 
 private:
   // Dialog
   About                     _about;
-  OpenConfirmation          _openConfirmation;
   Goto                      _goto;
   SettingsDialog            _settingsDialog;
 
@@ -90,7 +93,6 @@ private:
 
   // Core
   medusa::Medusa            _medusa;
-  medusa::Loader::SharedPtr _selectedLoader;
 };
 
 #endif // !__MAIN_WINDOW_H__

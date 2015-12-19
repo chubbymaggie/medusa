@@ -10,13 +10,20 @@
 #include <ogdf/layered/OptimalRanking.h>
 #include <ogdf/layered/OptimalHierarchyLayout.h>
 
-ControlFlowGraphScene::ControlFlowGraphScene(QObject * parent, medusa::Medusa& core, medusa::Function const& func)
+ControlFlowGraphScene::ControlFlowGraphScene(QObject * parent, medusa::Medusa& core, medusa::Address const& cfgAddr)
   : QGraphicsScene(parent)
-  , _core(core), _func(func)
+  , _core(core)
 {
   ogdf::Graph graph;
   ogdf::GraphAttributes graphAttr(graph, ogdf::GraphAttributes::nodeGraphics | ogdf::GraphAttributes::edgeGraphics);
-  auto cfg = func.GetControlFlowGraph();
+
+
+  medusa::ControlFlowGraph cfg;
+  if (!core.BuildControlFlowGraph(cfgAddr, cfg))
+  {
+    medusa::Log::Write("ui_qt") << "failed to build CFG for: " << cfgAddr << medusa::LogEnd;
+    return;
+  }
 
   qreal maxBbWidth = 0.0, maxBbHeight = 0.0;
 

@@ -68,9 +68,9 @@ public:
 
 struct AskForConfiguration : public boost::static_visitor<>
 {
-  AskForConfiguration(Configuration& rCfg) : m_rCfg(rCfg) {}
+  AskForConfiguration(ConfigurationModel& rCfgMdl) : m_rCfgMdl(rCfgMdl) {}
 
-  Configuration& m_rCfg;
+  ConfigurationModel& m_rCfgMdl;
 
   void operator()(ConfigurationModel::NamedBool const& rBool) const
   {
@@ -88,7 +88,7 @@ struct AskForConfiguration : public boost::static_visitor<>
 
       if (Result == "false" || Result == "true")
       {
-        m_rCfg.Set(rBool.GetName(), !!(Result == "true"));
+        m_rCfgMdl.SetEnum(rBool.GetName(), !!(Result == "true"));
         return;
       }
 
@@ -97,7 +97,7 @@ struct AskForConfiguration : public boost::static_visitor<>
 
       if (Choose == 0 || Choose == 1)
       {
-        m_rCfg.Set(rBool.GetName(), Choose);
+        m_rCfgMdl.SetEnum(rBool.GetName(), Choose);
         return;
       }
     }
@@ -107,10 +107,10 @@ struct AskForConfiguration : public boost::static_visitor<>
   {
     std::cout << std::dec;
     std::cout << "ENUM TYPE: " << rEnum.GetName() << std::endl;
-    for (ConfigurationModel::Enum::const_iterator It = rEnum.GetValue().begin();
-      It != rEnum.GetValue().end(); ++It)
+    for (Configuration::Enum::const_iterator It = rEnum.GetConfigurationValue().begin();
+      It != rEnum.GetConfigurationValue().end(); ++It)
     {
-      if (It->second == m_rCfg.Get(rEnum.GetName()))
+      if (It->second == m_rCfgMdl.GetEnum(rEnum.GetName()))
         std::cout << "* ";
       else
         std::cout << "  ";
@@ -129,35 +129,18 @@ struct AskForConfiguration : public boost::static_visitor<>
       std::istringstream iss(Result);
       if (!(iss >> Choose)) continue;
 
-      for (ConfigurationModel::Enum::const_iterator It = rEnum.GetValue().begin();
-        It != rEnum.GetValue().end(); ++It)
+      for (Configuration::Enum::const_iterator It = rEnum.GetConfigurationValue().begin();
+        It != rEnum.GetConfigurationValue().end(); ++It)
         if (It->second == Choose)
         {
-          m_rCfg.Set(rEnum.GetName(), Choose);
+          m_rCfgMdl.SetEnum(rEnum.GetName(), Choose);
           return;
         }
     }
   }
 };
 
-std::wstring mbstr2wcstr(std::string const& s)
-{
-  wchar_t *wcs = new wchar_t[s.length() + 1];
-  std::wstring result;
-
-  if (mbstowcs(wcs, s.c_str(), s.length()) == -1)
-    throw std::invalid_argument("convertion failed");
-
-  wcs[s.length()] = L'\0';
-
-  result = wcs;
-
-  delete[] wcs;
-
-  return result;
-}
-
-void DummyLog(std::wstring const & rMsg)
+void DummyLog(std::string const & rMsg)
 {
   std::wcout << rMsg << std::flush;
 }
@@ -166,8 +149,8 @@ int main(int argc, char **argv)
 {
   std::cout.sync_with_stdio(false);
   std::wcout.sync_with_stdio(false);
-  std::string file_path;
-  std::string mod_path;
+  boost::filesystem::path file_path;
+  boost::filesystem::path mod_path(".");
   Log::SetLog(DummyLog);
 
   try
@@ -176,16 +159,15 @@ int main(int argc, char **argv)
       return 0;
     file_path = argv[1];
 
-    std::wstring wfile_path = mbstr2wcstr(file_path);
-    std::wstring wmod_path  = L".";
+    std::wcout << L"Analyzing the following file: \""         << file_path << "\"" << std::endl;
+    std::wcout << L"Using the following path for modules: \"" << mod_path  << "\"" << std::endl;
 
-    std::wcout << L"Analyzing the following file: \""         << wfile_path << "\"" << std::endl;
-    std::wcout << L"Using the following path for modules: \"" << wmod_path  << "\"" << std::endl;
+    BinaryStream::SharedPtr bin_strm = std::make_shared<FileBinaryStream>(file_path);
+    Medusa m;
 
-    Medusa m(wfile_path);
-
-    m.LoadModules(wmod_path);
     auto& mod_mgr = ModuleManager::Instance();
+
+    mod_mgr.LoadModules(L".", *bin_strm);
 
     if (mod_mgr.GetLoaders().empty())
     {
@@ -195,41 +177,50 @@ int main(int argc, char **argv)
 
     std::cout << "Choose a executable format:" << std::endl;
     AskFor<Loader::VectorSharedPtr::value_type, Loader::VectorSharedPtr> AskForLoader;
-    Loader::VectorSharedPtr::value_type pLoader = AskForLoader(mod_mgr.GetLoaders());
-    std::cout << "Interpreting executable format using \"" << pLoader->GetName() << "\"..." << std::endl;
-    pLoader->Map();
+    Loader::VectorSharedPtr::value_type ldr = AskForLoader(mod_mgr.GetLoaders());
+    std::cout << "Interpreting executable format using \"" << ldr->GetName() << "\"..." << std::endl;
     std::cout << std::endl;
 
-    std::cout << "Choose an architecture:" << std::endl;
-    AskFor<Architecture::VectorSharedPtr::value_type, Architecture::VectorSharedPtr> AskForArch;
-    Architecture::VectorSharedPtr::value_type pArch = pLoader->GetMainArchitecture(mod_mgr.GetArchitectures());
-    if (!pArch)
-      pArch = AskForArch(mod_mgr.GetArchitectures());
-
-    auto cur_os = mod_mgr.GetOperatingSystem(pLoader, pArch);
+    auto archs = mod_mgr.GetArchitectures();
+    ldr->FilterAndConfigureArchitectures(archs);
+    auto os = mod_mgr.GetOperatingSystem(ldr, archs.front());
 
     std::cout << std::endl;
 
     ConfigurationModel CfgMdl;
-    pArch->FillConfigurationModel(CfgMdl);
-    pLoader->Configure(CfgMdl.GetConfiguration());
 
-    //std::cout << "Configuration:" << std::endl;
-    //for (ConfigurationModel::ConstIterator It = CfgMdl.Begin(); It != CfgMdl.End(); ++It)
-    //  boost::apply_visitor(AskForConfiguration(CfgMdl.GetConfiguration()), *It);
+    std::cout << "Configuration:" << std::endl;
+    for (auto itCfg = CfgMdl.Begin(), itEnd = CfgMdl.End(); itCfg != itEnd; ++itCfg)
+      boost::apply_visitor(AskForConfiguration(CfgMdl), itCfg->second);
 
-    pArch->UseConfiguration(CfgMdl.GetConfiguration());
-    mod_mgr.RegisterArchitecture(pArch);
+    AskFor<Database::VectorSharedPtr::value_type, Database::VectorSharedPtr> AskForDb;
+    auto db = AskForDb(mod_mgr.GetDatabases());
 
-    auto cur_addr = pLoader->GetEntryPoint();
+    boost::filesystem::path db_path = file_path;
+    db_path.replace_extension(db->GetExtension());
+    if (db->Create(db_path, false) == false)
+      db->Open(db_path);
+
+    if (ldr->GetName() == "Raw file")
+      db->AddLabel(0x0, Label("start", Label::Code | Label::Exported));
+
+    m.Start(bin_strm, db, ldr, archs, os);
     std::cout << "Disassembling..." << std::endl;
-    m.ConfigureEndianness(pArch);
-    m.Analyze(pArch, cur_addr);
+    m.WaitForTasks();
 
-    Execution exec(&m, pArch, cur_os);
-    exec.Initialize(0x2000000, 0x40000);
-    exec.SetEmulator("llvm");
-    exec.Execute(cur_addr);
+    Execution exec(m.GetDocument(), archs.front(), os);
+    if (!exec.Initialize(m.GetDocument().GetMode(m.GetDocument().GetStartAddress()), 0x2000000, 0x40000))
+    {
+      std::cerr << "Unable to initialize emulator" << std::endl;
+      return 0;
+    }
+    if (!exec.SetEmulator("interpreter"))
+    {
+      std::cerr << "Unable to set the emulator" << std::endl;
+      return 0;
+    }
+
+    exec.Execute(m.GetDocument().GetAddressFromLabelName("start"));
 
     //auto fnApiStub = [](CpuContext* pCpuCtxt, MemoryContext* pMemCtxt)
     //{

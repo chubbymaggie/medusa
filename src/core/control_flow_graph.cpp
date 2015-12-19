@@ -72,18 +72,31 @@ void ControlFlowGraph::Finalize(Document const& rDoc)
 {
   for (auto itVertex = std::begin(m_VertexMap); itVertex != std::end(m_VertexMap); ++itVertex)
   {
-    Address::List const& rBlockAddrs = m_Graph[itVertex->second].GetAddresses();
+    auto const& rBscBlk = m_Graph[itVertex->second];
+    Address::List const& rBlockAddrs = rBscBlk.GetAddresses();
+
+    auto spLastInsn = std::dynamic_pointer_cast<Instruction>(rDoc.GetCell(rBscBlk.GetLastAddress()));
+    if (spLastInsn == nullptr)
+      continue;
+
+    if (spLastInsn->GetSubType() == Instruction::JumpType)
+      continue;
+
     bool SkipBlock = false;
     for (auto itAddr = std::begin(rBlockAddrs); itAddr != std::end(rBlockAddrs); ++itAddr)
     {
       auto spCell = rDoc.GetCell(*itAddr);
-      if (spCell == nullptr)                                                                    continue;
-      if (spCell->GetType() != CellData::InstructionType)                                       continue;
+      if (spCell == nullptr)
+        continue;
+      if (spCell->GetType() != Cell::InstructionType)
+        continue;
 
-      u32 OpType = std::static_pointer_cast<Instruction>(spCell)->GetOperationType();
+      u32 OpType = std::static_pointer_cast<Instruction>(spCell)->GetSubType();
 
-      if (!(OpType & Instruction::OpRet))  continue;
-      if ( (OpType & Instruction::OpCond)) continue;
+      if (!(OpType & Instruction::ReturnType))
+        continue;
+      if ( (OpType & Instruction::ConditionalType))
+        continue;
       SkipBlock = true;
       break;
     }
@@ -98,7 +111,8 @@ void ControlFlowGraph::Finalize(Document const& rDoc)
       return;
 
     auto CurEdge = boost::edge(itVertex->second, itNextVertex->second, m_Graph);
-    if (CurEdge.second) continue;
+    if (CurEdge.second)
+      continue;
 
     Log::Write("core") << "Fix orphan basic blocks at " << itVertex->first.ToString() << " and " << itNextVertex->first.ToString() << LogEnd;
     AddBasicBlockEdge(BasicBlockEdgeProperties(BasicBlockEdgeProperties::Next), itVertex->first, itNextVertex->first);

@@ -31,7 +31,7 @@ FileBinaryStream::FileBinaryStream(void)
 {
 }
 
-FileBinaryStream::FileBinaryStream(std::wstring const& rFilePath)
+FileBinaryStream::FileBinaryStream(boost::filesystem::path const& rFilePath)
 : BinaryStream()
 , m_FileName(rFilePath)
 , m_FileHandle(INVALID_HANDLE_VALUE)
@@ -45,10 +45,10 @@ FileBinaryStream::~FileBinaryStream(void)
   Close();
 }
 
-void FileBinaryStream::Open(std::wstring const& rFilePath)
+void FileBinaryStream::Open(boost::filesystem::path const& rFilePath)
 {
   if (m_pBuffer != nullptr)
-    throw Exception(L"Binary stream: close the current file first before opening a new one");
+    throw Exception("Binary stream: close the current file first before opening a new one");
 
   m_FileName   = rFilePath;
   m_FileHandle = INVALID_HANDLE_VALUE;
@@ -66,12 +66,12 @@ void FileBinaryStream::Open(std::wstring const& rFilePath)
       );
 
   if (m_FileHandle == INVALID_HANDLE_VALUE)
-    throw Exception_System(L"CreateFileW");
+    throw Exception_System("CreateFileW");
 
   LARGE_INTEGER FileSize;
 
   if (GetFileSizeEx(m_FileHandle, &FileSize) == FALSE)
-    throw Exception_System(L"GetFileSizeEx");
+    throw Exception_System("GetFileSizeEx");
 
   m_Size = static_cast<u32>(FileSize.QuadPart);
 
@@ -85,7 +85,7 @@ void FileBinaryStream::Open(std::wstring const& rFilePath)
       );
 
   if (m_MapHandle == nullptr)
-    throw Exception_System(L"CreateFileMappingW");
+    throw Exception_System("CreateFileMappingW");
 
   m_pBuffer = MapViewOfFile(
       m_MapHandle,
@@ -95,7 +95,7 @@ void FileBinaryStream::Open(std::wstring const& rFilePath)
       );
 
   if (m_pBuffer == nullptr)
-    throw Exception_System(L"MapViewOfFile");
+    throw Exception_System("MapViewOfFile");
 }
 
 void FileBinaryStream::Close(void)
@@ -126,7 +126,7 @@ MemoryBinaryStream::MemoryBinaryStream(void)
 {
 }
 
-MemoryBinaryStream::MemoryBinaryStream(void* pMem, u32 MemSize)
+MemoryBinaryStream::MemoryBinaryStream(void const* pMem, u32 MemSize)
   : BinaryStream()
 {
   Open(pMem, MemSize);
@@ -137,15 +137,18 @@ MemoryBinaryStream::~MemoryBinaryStream(void)
   Close();
 }
 
-void MemoryBinaryStream::Open(void* pMem, u32 MemSize)
+void MemoryBinaryStream::Open(void const* pMem, u32 MemSize)
 {
-  m_pBuffer = pMem;
+  m_pBuffer = ::malloc(MemSize);
+  //if (m_pBuffer == nullptr)
+  // TODO throw exception
   m_Size    = MemSize;
+  memcpy(m_pBuffer, pMem, MemSize);
 }
 
 void MemoryBinaryStream::Close(void)
 {
-  delete [] m_pBuffer;
+  ::free(m_pBuffer);
   m_pBuffer = nullptr;
   m_Size = 0x0;
   m_Endianness = EndianUnknown;

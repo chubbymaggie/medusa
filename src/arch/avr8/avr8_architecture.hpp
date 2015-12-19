@@ -30,17 +30,29 @@ public:
 
   virtual std::string GetName(void) const { return "Atmel AVR 8-bit"; }
   virtual bool        Translate(Address const& rVirtAddr, TOffset& rPhyslOff);
-  virtual bool        Disassemble(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn);
-  virtual void        FillConfigurationModel(ConfigurationModel& rCfgMdl);
+  virtual bool        Disassemble(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  virtual NamedModeVector GetModes(void) const
+  {
+    NamedModeVector Avr8Modes;
+    Avr8Modes.reserve(1);
+    Avr8Modes.push_back(NamedMode("avr8", 0));
+    return Avr8Modes;
+  }
   virtual EEndianness GetEndianness(void) { return LittleEndian; }
   virtual CpuInformation const* GetCpuInformation(void) const { return nullptr; }
   virtual CpuContext* MakeCpuContext(void) const { return nullptr; }
   virtual MemoryContext* MakeMemoryContext(void) const { return nullptr; }
 
+  virtual bool FormatOperand(
+    Document      const& rDoc,
+    Address       const& rAddress,
+    Instruction   const& rInstruction,
+    Operand       const& rOperand,
+    u8                   OperandNo,
+    PrintData          & rPrintData) const;
+
 private:
   static char const *m_RegName[];
-
-  void FormatOperand(Operand& Op, TOffset Offset);
 
   bool Insn_(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn); // DELETE WHEN FINISH
 

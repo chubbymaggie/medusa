@@ -5,8 +5,8 @@
 
 MEDUSA_NAMESPACE_BEGIN
 
-Execution::Execution(Medusa* pCore, Architecture::SharedPtr spArch, OperatingSystem::SharedPtr spOs)
-: m_pCore(pCore)
+Execution::Execution(Document& rDoc, Architecture::SharedPtr spArch, OperatingSystem::SharedPtr spOs)
+: m_rDoc(rDoc)
 , m_spArch(spArch), m_spOs(spOs)
 , m_pCpuCtxt(nullptr), m_pMemCtxt(nullptr)
 , m_pCpuInfo(spArch->GetCpuInformation())
@@ -17,7 +17,7 @@ Execution::~Execution(void)
 {
 }
 
-bool Execution::Initialize(u64 StackLinearAddress, u32 StackSize)
+bool Execution::Initialize(u8 Mode, u64 StackLinearAddress, u32 StackSize)
 {
   delete m_pCpuCtxt;
   delete m_pMemCtxt;
@@ -26,18 +26,20 @@ bool Execution::Initialize(u64 StackLinearAddress, u32 StackSize)
   m_pMemCtxt = m_spArch->MakeMemoryContext();
   if (m_spOs != nullptr)
   {
-    m_spOs->InitializeCpuContext(*m_pCpuCtxt);
-    m_spOs->InitializeMemoryContext(*m_pMemCtxt);
+    m_spOs->InitializeCpuContext(m_rDoc, *m_pCpuCtxt);
+    m_spOs->InitializeMemoryContext(m_rDoc, *m_pMemCtxt);
   }
 
-  if (m_pMemCtxt->MapDocument(m_pCore->GetDocument(), m_pCpuCtxt) == false)
+  m_pCpuCtxt->SetMode(Mode);
+
+  if (m_pMemCtxt->MapDocument(m_rDoc, m_pCpuCtxt) == false)
     return false;
 
   if (m_pMemCtxt->AllocateMemory(StackLinearAddress, StackSize, nullptr) == false)
     return false;
 
   u64 StackRegisterValue = StackLinearAddress + StackSize;
-  u32 StkReg = m_pCpuInfo->GetRegisterByType(CpuInformation::StackPointerRegister);
+  u32 StkReg = m_pCpuInfo->GetRegisterByType(CpuInformation::StackPointerRegister, Mode);
   if (StkReg == CpuInformation::InvalidRegister)
     return false;
   u32 StkRegSize = m_pCpuInfo->GetSizeOfRegisterInBit(StkReg);
@@ -69,7 +71,7 @@ void Execution::Execute(Address const& rAddr)
 
   Address CurAddr = rAddr;
 
-  u32 ProgPtrReg = m_pCpuInfo->GetRegisterByType(CpuInformation::ProgramPointerRegister);
+  u32 ProgPtrReg = m_pCpuInfo->GetRegisterByType(CpuInformation::ProgramPointerRegister, m_pCpuCtxt->GetMode());
   if (ProgPtrReg == CpuInformation::InvalidRegister)
     return;
   u32 ProgPtrRegSize = m_pCpuInfo->GetSizeOfRegisterInBit(ProgPtrReg);
@@ -84,28 +86,17 @@ void Execution::Execute(Address const& rAddr)
   Address BlkAddr = CurAddr;
   while (true)
   {
-    Log::Write("exec") << m_pCpuCtxt->ToString() << LogEnd;
+    //std::cout << m_pCpuCtxt->ToString() << std::endl;
 
     Expression::List Sems;
     while (true)
     {
-      auto spCurInsn = std::dynamic_pointer_cast<Instruction>(m_pCore->GetCell(CurAddr));
+      auto spCurInsn = std::dynamic_pointer_cast<Instruction>(m_rDoc.GetCell(CurAddr));
       if (spCurInsn == nullptr)
-        break;
-
-      std::string StrCell;
-      Cell::Mark::List Marks;
-      if (m_pCore->FormatCell(CurAddr, *spCurInsn, StrCell, Marks) == false)
-        break;
-
-      Log::Write("exec") << StrCell << LogEnd;
-
-      auto const& rCurSem = spCurInsn->GetSemantic();
-      std::for_each(std::begin(rCurSem), std::end(rCurSem), [&](Expression const* pExpr)
-      { Sems.push_back(pExpr->Clone()); });
-
-      if (spCurInsn->GetOperationType() != Instruction::OpUnknown)
-        break;
+      {
+        Log::Write("exec") << "execution finished\n" << m_pCpuCtxt->ToString() << "\n" << m_pMemCtxt->ToString() << LogEnd;
+        return;
+      }
 
       Sems.push_back(new OperationExpression(OperationExpression::OpAff,
         new IdentifierExpression(ProgPtrReg, m_pCpuInfo),
@@ -114,6 +105,18 @@ void Execution::Execute(Address const& rAddr)
         /**/new ConstantExpression(ProgPtrRegSize * 8, spCurInsn->GetLength())
         )));
       CurAddr.SetOffset(CurAddr.GetOffset() + spCurInsn->GetLength());
+
+      auto const& rCurSem = spCurInsn->GetSemantic();
+      if (rCurSem.empty())
+      {
+        Log::Write("exec") << "no semantic available" << LogEnd;
+        break;
+      }
+      std::for_each(std::begin(rCurSem), std::end(rCurSem), [&](Expression const* pExpr)
+      { Sems.push_back(pExpr->Clone()); });
+
+      if (spCurInsn->GetSubType() != Instruction::NoneType)
+        break;
     };
 
     bool Res = m_spEmul->Execute(BlkAddr, Sems);
@@ -121,7 +124,10 @@ void Execution::Execute(Address const& rAddr)
     { delete pExpr; });
 
     if (Res == false)
+    {
+      std::cout << "Execution failed:\n" << m_pCpuCtxt->ToString() << std::endl << m_pMemCtxt->ToString() << std::endl;
       break;
+    }
 
     u64 NextInsn = 0;
     if (m_pCpuCtxt->ReadRegister(ProgPtrReg, &NextInsn, ProgPtrRegSize) == false)

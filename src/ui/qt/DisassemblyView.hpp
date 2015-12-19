@@ -9,8 +9,8 @@
 # include <QResizeEvent>
 # include <QPaintEvent>
 
-# include "Settings.hpp"
-# include "DisassemblyPrinter.hpp"
+# include "Action.hpp"
+# include "Proxy.hpp"
 
 # include <vector>
 
@@ -19,6 +19,7 @@
 # include <medusa/document.hpp>
 # include <medusa/instruction.hpp>
 # include <medusa/disassembly_view.hpp>
+# include <medusa/cell_action.hpp>
 
 class DisassemblyView : public QAbstractScrollArea, public medusa::FullDisassemblyView
 {
@@ -37,6 +38,7 @@ signals:
   void SemanticViewAdded(medusa::Address const& funcAddr);
   void ControlFlowGraphViewAdded(medusa::Address const& funcAddr);
   void viewportUpdated(void);
+  void cursorAddressUpdated(medusa::Address const& addr);
 
 public slots:
   void setFont(void);
@@ -45,6 +47,7 @@ public slots:
   void listingUpdated(void);
   void updateCursor(void);
   void showContextMenu(QPoint const& pos);
+  void OnUiActionTriggered(medusa::Action::SPtr spAction);
 
 protected:
   virtual void paintEvent(QPaintEvent * evt);
@@ -54,18 +57,9 @@ protected:
   virtual void keyPressEvent(QKeyEvent * evt);
   virtual void resizeEvent(QResizeEvent * evt);
   virtual void wheelEvent(QWheelEvent * evt);
+  virtual void actionEvent(QActionEvent * evt);
 
 private:
-  enum LineType
-  {
-    UnknownLineType,
-    CellLineType,
-    MultiCellLineType,
-    LabelLineType,
-    MemoryAreaType,
-    EmptyLineType
-  };
-
   void paintBackground(QPainter& p);
   void paintSelection(QPainter& p);
   void paintText(QPainter& p);
@@ -75,31 +69,19 @@ private:
   void setCursorPosition(int x, int y);
   void moveCursorPosition(int x, int y);
 
-  void resetSelection(void);
-  void setSelection(int x, int y);
-  void moveSelection(int x, int y);
-
-  void getSelectedAddresses(medusa::Address::List& addresses);
-  void updateScrollbars(void);
   bool convertPositionToAddress(QPoint const & pos, medusa::Address & addr);
   bool convertMouseToAddress(QMouseEvent * evt, medusa::Address & addr);
-  void ensureCursorIsVisible(void);
 
-  bool                         _needRepaint;
-  medusa::Medusa *             _core;
-  int                          _xOffset, _yOffset;
-  int                          _wChar, _hChar;
-  int                          _xCursor;
-  int                          _begSelection, _endSelection;
-  int                          _begSelectionOffset, _endSelectionOffset;
-  int                          _addrLen;
-  int                          _lineNo, _lineLen;
-  int                          _lastVertPos;
-  QTimer                       _cursorTimer; 
-  bool                         _cursorBlink;
-  QPixmap                      _cache;
+  void _UpdateActions(void);
 
-  /* Actions */
+  bool             _needRepaint;
+  medusa::Medusa * _core;
+  int              _wChar, _hChar;
+  int              _addrLen;
+  int              _lastVertPos;
+  QTimer           _cursorTimer;
+  bool             _cursorBlink;
+  QPixmap          _cache;
 };
 
 #endif // !__DISASSEMBLY_VIEW_HPP__

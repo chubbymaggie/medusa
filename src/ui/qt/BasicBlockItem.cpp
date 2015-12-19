@@ -1,11 +1,11 @@
 #include "BasicBlockItem.hpp"
 #include <QObject>
 #include <sstream>
-#include "Settings.hpp"
+#include <medusa/user_configuration.hpp>
 
 BasicBlockItem::BasicBlockItem(QObject * parent, medusa::Medusa& core, medusa::Address::List const& addresses)
   : _parent(parent)
-  , medusa::DisassemblyView(core, new DisassemblyPrinter(core), medusa::Printer::ShowAddress, addresses)
+  , medusa::DisassemblyView(core, medusa::FormatDisassembly::ShowAddress, addresses.front())
   , _width(0.0), _height(0.0), _adLen(0.0)
   , _isPress(false)
   , _core(core)
@@ -17,10 +17,13 @@ BasicBlockItem::BasicBlockItem(QObject * parent, medusa::Medusa& core, medusa::A
   setGraphicsEffect(_fx);
   setZValue(10.0);
 
-  QString fontInfo = Settings::instance().value(MEDUSA_FONT_TEXT, MEDUSA_FONT_TEXT_DEFAULT).toString();
-  QFont font;
-  font.fromString(fontInfo);
-  QFontMetrics fm(font);
+  medusa::UserConfiguration UserCfg;
+  QString fontInfo = QString::fromStdString(UserCfg.GetOption("font.listing"));
+  _font.fromString(fontInfo);
+  QFontMetrics fm(_font);
+
+  m_Format(addresses, m_FormatFlags);
+
   medusa::u32 viewWidth, viewHeight;
   GetDimension(viewWidth, viewHeight);
   _width  = viewWidth  * fm.width('M');
@@ -71,36 +74,80 @@ void BasicBlockItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
 
 void BasicBlockItem::paintBackground(QPainter& p)
 {
-  QRectF bgRct = boundingRect();
-  QRectF adRct = boundingRect();
-  QColor bgClr = QColor(Settings::instance().value(MEDUSA_COLOR_VIEW_BACKGROUND, MEDUSA_COLOR_VIEW_BACKGROUND_DEFAULT).toString());
-  QColor adClr = QColor(Settings::instance().value(MEDUSA_COLOR_ADDRESS_BACKGROUND, MEDUSA_COLOR_ADDRESS_BACKGROUND_DEFAULT).toString());
+  medusa::UserConfiguration UserCfg;
+  QRectF BgRct = boundingRect();
+  QRectF AdRct = boundingRect();
+  QColor BgClr = QColor(QString::fromStdString(UserCfg.GetOption("color.background_listing")));
+  QColor AdClr = QColor(QString::fromStdString(UserCfg.GetOption("color.background_address")));
   qreal opacity = 1.0;
 
   if (_isPress)
   {
-    bgClr = Qt::darkBlue;
+    BgClr = Qt::darkBlue;
     opacity = 0.7;
   }
 
-  bgRct.setX(bgRct.x() + _adLen);
-  adRct.setWidth(_adLen);
+  BgRct.setX(BgRct.x() + _adLen);
+  AdRct.setWidth(_adLen);
 
-  QBrush bgBrsh(bgClr);
-  QBrush adBrsh(adClr);
+  QBrush bgBrsh(BgClr);
+  QBrush adBrsh(AdClr);
 
   setOpacity(opacity);
-  p.fillRect(bgRct, bgBrsh);
-  p.fillRect(adRct, adBrsh);
-  _fx->setColor(bgClr);
-  p.drawRect(bgRct);
-  p.drawRect(adRct);
+  p.fillRect(BgRct, bgBrsh);
+  p.fillRect(AdRct, adBrsh);
+  _fx->setColor(BgClr);
+  p.drawRect(BgRct);
+  p.drawRect(AdRct);
 }
 
 void BasicBlockItem::paintText(QPainter& p)
 {
-  auto fm = p.fontMetrics();
-  static_cast<DisassemblyPrinter*>(m_pPrinter)->SetPainter(&p);
-  Print();
-  static_cast<DisassemblyPrinter*>(m_pPrinter)->SetPainter(nullptr);
+  p.setFont(_font);
+  QFontMetrics fm(_font);
+  auto hChar = fm.height();
+  auto wChar = fm.width('M');
+  int Line = hChar - 5; // http://doc.qt.digia.com/qt-maemo/qpainter.html#drawText-12 (Note: The y-position is used as the baseline of the font.)
+
+  medusa::UserConfiguration UserCfg;
+  QColor MnClr(QString::fromStdString(UserCfg.GetOption("color.instruction_mnemonic")));
+  QColor KwClr(QString::fromStdString(UserCfg.GetOption("color.keyword")));
+  QColor ImClr(QString::fromStdString(UserCfg.GetOption("color.instruction_immediate")));
+  QColor OpClr(QString::fromStdString(UserCfg.GetOption("color.operator")));
+  QColor RgClr(QString::fromStdString(UserCfg.GetOption("color.instruction_register")));
+  QColor LbClr(QString::fromStdString(UserCfg.GetOption("color.label")));
+  QColor SzClr(QString::fromStdString(UserCfg.GetOption("color.string")));
+  QColor CmClr(QString::fromStdString(UserCfg.GetOption("color.comment")));
+  QColor DfClr(Qt::black);
+
+
+  QColor MarkClr = DfClr;
+  m_PrintData.ForEachLine([&](medusa::Address const& rAddr, std::string const& rText, medusa::Mark::List const& rMarks)
+  {
+    std::string::size_type TextOff = 0;
+    for (auto const& rMark : rMarks)
+    {
+      auto MarkLen = rMark.GetLength();
+      if (rMark.GetType() != medusa::Mark::UnprintableType)
+      {
+        switch (rMark.GetType())
+        {
+        case medusa::Mark::MnemonicType:  MarkClr = MnClr; break;
+        case medusa::Mark::KeywordType:   MarkClr = KwClr; break;
+        case medusa::Mark::ImmediateType: MarkClr = ImClr; break;
+        case medusa::Mark::OperatorType:  MarkClr = OpClr; break;
+        case medusa::Mark::RegisterType:  MarkClr = RgClr; break;
+        case medusa::Mark::LabelType:     MarkClr = LbClr; break;
+        case medusa::Mark::StringType:    MarkClr = SzClr; break;
+        case medusa::Mark::CommentType:   MarkClr = CmClr; break;
+        default:                          MarkClr = DfClr; break;
+        };
+        p.setPen(MarkClr);
+        QString Text = QString::fromUtf8(rText.substr(TextOff, MarkLen).c_str());
+        p.drawText(static_cast<int>(TextOff * wChar), Line, Text);
+      }
+      TextOff += MarkLen;
+    }
+    Line += hChar;
+  });
 }

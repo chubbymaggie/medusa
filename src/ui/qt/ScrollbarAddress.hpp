@@ -18,11 +18,31 @@ public:
 
   virtual void OnAddressUpdated(medusa::Address::List const& rAddressList);
 
+  void Refresh(void);
+
+public slots:
+  void setCurrentAddress(medusa::Address const& addr);
+
 protected:
-  void paintEvent(QPaintEvent* p);
+  virtual void paintEvent(QPaintEvent* evt);
+  virtual void resizeEvent(QResizeEvent* evt);
+  virtual void mousePressEvent(QMouseEvent * evt);
+  virtual void mouseMoveEvent(QMouseEvent * evt);
+
+signals:
+  void goTo(medusa::Address const& addr);
+  void updated(void);
 
 private:
-  medusa::Medusa& _core;
+  QColor const& _CellTypeToColor(medusa::u8 CellType) const;
+
+  medusa::Medusa&       _core;
+  QPixmap               _img;
+  medusa::u32           _lastPos;
+  medusa::u32           _currPos;
+  medusa::u32           _maxPos;
+  QMutex                _mutex;
+  static int            _width;
 };
 
 #endif // !__SCROLLBAR_ADDRESS_HPP__

@@ -15,9 +15,12 @@
 #include "medusa/character.hpp"
 #include "medusa/value.hpp"
 #include "medusa/instruction.hpp"
+#include "medusa/string.hpp"
 
 #include "medusa/function.hpp"
-#include "medusa/string.hpp"
+#include "medusa/structure.hpp"
+
+#include "medusa/cell_text.hpp"
 
 #include <map>
 #include <vector>
@@ -26,8 +29,6 @@
 #include <boost/shared_ptr.hpp>
 
 MEDUSA_NAMESPACE_BEGIN
-
-class Document;
 
 /*! This class defines what an architecture plug-in must implement.
  * Don't forget to export a extern "C" Architecture* GetArchitecture(void) function
@@ -39,8 +40,10 @@ public:
   typedef std::vector<SharedPtr>          VectorSharedPtr;
   typedef std::list<SharedPtr>            ListSharedPtr;
   typedef std::map<Tag, SharedPtr>        TagMap;
+  typedef std::tuple<const char*, u8>     NamedMode;
+  typedef std::vector<NamedMode>          NamedModeVector;
 
-  Architecture(Tag ArchTag) : m_Tag(ArchTag) {}
+  Architecture(Tag ArchTag);
 
   //! This method returns the name of the current architecture.
   virtual std::string GetName(void) const = 0;
@@ -49,11 +52,14 @@ public:
   virtual bool        Translate(Address const& rVirtAddr, TOffset& rPhysOff) = 0;
 
   //! This method disassembles one instruction.
-  virtual bool        Disassemble(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn) = 0;
+  virtual bool        Disassemble(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode) = 0;
 
-  //! This method fills a configuration object.
-  virtual void        FillConfigurationModel(ConfigurationModel& rCfgMdl)
-  { rCfgMdl.Set("Disassembly only basic block", false); }
+  //! This method returns all available mode
+  virtual NamedModeVector GetModes(void) const = 0;
+  u8                      GetModeByName(std::string const &rModeName) const;
+
+  //! This method helps the analyzer to guess the correct mode
+  virtual u8 GetDefaultMode(Address const& rAddress) const { return 0; }
 
   //! This method returns the architecture endianness.
   virtual EEndianness GetEndianness(void) = 0;
@@ -75,89 +81,100 @@ public:
 
   void                AnalyzeFunction(Function const& rFunc);
 
-  //! This method allows to configure the current architecture.
-  void                UseConfiguration(Configuration const& rCfg) { m_Cfg = rCfg; }
+  ConfigurationModel& GetConfigurationModel(void) { return m_CfgMdl; }
+  ConfigurationModel const& GetConfigurationModel(void) const { return m_CfgMdl; }
+  bool                DisassembleBasicBlockOnly(void) const { return m_CfgMdl.GetBoolean("Disassembly only basic block"); }
 
-  bool                DisassembleBasicBlockOnly(void) const { return m_Cfg.Get("Disassembly only basic block") == 0 ? false : true; }
+  bool FormatTypeDetail(
+    TypeDetail const& rTypeDtl,
+    PrintData       & rPrintData) const;
+
+  bool FormatValueDetail(
+    Document    const& rDoc,
+    Address     const& rAddr,
+    u8                 ValueBits,
+    ValueDetail const& rValDtl,
+    PrintData        & rPrintData) const;
 
   //! This method allows architecture to format cell as it wants.
   //\param rDoc is needed if rCell contains a reference.
-  //\param rBinStrm must be the binary stream of the memory area where rCell is located.
   //\param rAddr is the address of rCell.
   //\param rCell is the cell object.
   bool FormatCell(
     Document      const& rDoc,
-    BinaryStream  const& rBinStrm,
     Address       const& rAddress,
     Cell          const& rCell,
-    std::string        & rStrCell,
-    Cell::Mark::List   & rMarks) const;
+    PrintData          & rPrintData) const;
 
-  //! This method converts an Instruction object to a string and stores the result on it.
+  //! This method converts an Operand object to a string
+  //\param rDoc is needed if an operand contains a reference.
+  //\param rAddr is the address of rInsn.
+  //\param rInsn is the cell object.
+  virtual bool FormatOperand(
+    Document      const& rDoc,
+    Address       const& rAddress,
+    Instruction   const& rInstruction,
+    Operand       const& rOperand,
+    u8                   OperandNo,
+    PrintData          & rPrintData) const;
+
+  //! This method converts an Instruction object to a string.
   //\param rDoc is needed if an operand contains a reference.
   //\param rAddr is the address of rInsn.
   //\param rInsn is the cell object.
   virtual bool FormatInstruction(
     Document      const& rDoc,
-    BinaryStream  const& rBinStrm,
     Address       const& rAddr,
     Instruction   const& rInsn,
-    std::string        & rStrCell,
-    Cell::Mark::List   & rMarks) const;
+    PrintData          & rPrintData) const;
 
   //! This method reads and convert a character.
   //\param rDoc is reserved for future use.
-  //\param rBinStrm must be the binary stream of the memory area where rChar is located.
   //\param rAddr is the address of rChar.
   //\param rChar is the cell object.
   virtual bool FormatCharacter(
     Document      const& rDoc,
-    BinaryStream  const& rBinStrm,
     Address       const& rAddr,
     Character     const& rChar,
-    std::string        & rStrCell,
-    Cell::Mark::List   & rMarks) const;
+    PrintData          & rPrintData) const;
 
   //! This method reads and convert a numeric value.
   //\param rDoc is needed if rVal contains a reference.
-  //\param rBinStrm must be the binary stream of the memory area where rVal is located.
   //\param rAddr is the address of rVal.
   //\param rVal is the cell object.
   virtual bool FormatValue(
     Document      const& rDoc,
-    BinaryStream  const& rBinStrm,
     Address       const& rAddr,
     Value         const& rVal,
-    std::string        & rStrCell,
-    Cell::Mark::List   & rMarks) const;
-
-  bool FormatMultiCell(
-    Document      const& rDoc,
-    BinaryStream  const& rBinStrm,
-    Address       const& rAddress,
-    MultiCell     const& rMultiCell,
-    std::string        & rStrMultiCell,
-    Cell::Mark::List   & rMarks) const;
+    PrintData          & rPrintData) const;
 
   virtual bool FormatString(
     Document      const& rDoc,
-    BinaryStream  const& rBinStrm,
     Address       const& rAddr,
     String        const& rStr,
-    std::string        & rStrMultiCell,
-    Cell::Mark::List   & rMarks) const;
+    PrintData          & rPrintData) const;
+
+  bool FormatMultiCell(
+    Document      const& rDoc,
+    Address       const& rAddress,
+    MultiCell     const& rMultiCell,
+    PrintData          & rPrintData) const;
 
   virtual bool FormatFunction(
     Document      const& rDoc,
-    BinaryStream  const& rBinStrm,
     Address       const& rAddr,
     Function      const& rFunc,
-    std::string        & rStrMultiCell,
-    Cell::Mark::List   & rMarks) const;
+    PrintData          & rPrintData) const;
+
+  virtual bool FormatStructure(
+    Document      const& rDoc,
+    Address       const& rAddr,
+    Structure     const& rStruct,
+    PrintData          & rPrintData) const;
 
 protected:
-  Configuration m_Cfg;
-  Tag           m_Tag;
+  ConfigurationModel m_CfgMdl;
+  Tag                m_Tag;
 };
 
 typedef Architecture* (*TGetArchitecture)(void);

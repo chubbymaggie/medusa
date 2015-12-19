@@ -9,27 +9,28 @@
 #include <QMessageBox>
 #include <QKeySequence>
 #include <QScrollBar>
+#include <QMessageBox>
 
 #include "MainWindow.hpp"
-#include "Settings.hpp"
+#include "ConfigureDialog.hpp"
 #include "Proxy.hpp"
 
-#include "medusa/module.hpp"
-#include "medusa/log.hpp"
+#include <medusa/binary_stream.hpp>
+#include <medusa/module.hpp>
+#include <medusa/log.hpp>
+#include <medusa/user_configuration.hpp>
 
 MainWindow::MainWindow()
   : QMainWindow(), Ui::MainWindow()
   , _about(this)
-  , _openConfirmation(this)
   , _goto(this)
-  , _settingsDialog(this)
+  , _settingsDialog(this, _medusa)
   , _undoJumpView()
   , _fileName("")
   , _documentOpened(false)
   , _closeWindow(false)
   , _openDocument(false)
   , _medusa()
-  , _selectedLoader()
 {
   this->setupUi(this);
 
@@ -37,11 +38,17 @@ MainWindow::MainWindow()
 
   this->tabWidget->setTabsClosable(true);
 
-  this->restoreGeometry(Settings::instance().value(WINDOW_GEOMETRY, WINDOW_GEOMETRY_DEFAULT).toByteArray());
-  this->restoreState(Settings::instance().value(WINDOW_LAYOUT, WINDOW_LAYOUT_DEFAULT).toByteArray());
+  medusa::UserConfiguration UserCfg;
+  std::string Base64Geometry = UserCfg.GetOption("ui_qt.geometry");
+  std::string Geometry = medusa::Base64Decode(Base64Geometry);
+  restoreGeometry(QByteArray(Geometry.data(), Geometry.size()));
+  std::string Base64State = UserCfg.GetOption("ui_qt.state");
+  std::string State = medusa::Base64Decode(Base64State);
+  restoreState(QByteArray(State.data(), State.size()));
 
-  connect(this->tabWidget, SIGNAL(tabCloseRequested(int)),       this, SLOT(on_tabWidget_tabCloseRequested(int)));
-  connect(this,            SIGNAL(logAppended(QString const &)), this, SLOT(onLogMessageAppended(QString const &)));
+  connect(this->tabWidget, SIGNAL(tabCloseRequested(int)), this, SLOT(on_tabWidget_tabCloseRequested(int)));
+  connect(this, SIGNAL(logAppended(QString const &)), this, SLOT(onLogMessageAppended(QString const &)));
+  connect(this, SIGNAL(lastAddressUpdated(medusa::Address const&)), this, SLOT(setCurrentAddress(medusa::Address const&)));
 }
 
 MainWindow::~MainWindow()
@@ -50,116 +57,164 @@ MainWindow::~MainWindow()
 
 bool MainWindow::openDocument()
 {
-  auto& modMgr = medusa::ModuleManager::Instance();
-  try
+  if (_documentOpened)
+    return false;
+
+  _fileName = QFileDialog::getOpenFileName(this, tr("Select a file"));
+  if (_fileName.isNull())
+    return false;
+
+  return _medusa.NewDocument(_fileName.toStdWString(),
+    [&](boost::filesystem::path& dbPath, std::list<medusa::Medusa::Filter> const& filters)
   {
-    _fileName = QFileDialog::getOpenFileName(this, tr("Select a file"));
-
-    if (_fileName.isNull())
+    dbPath = QFileDialog::getSaveFileName(this,
+      "Select a database path",
+      QString::fromStdWString(dbPath.wstring())
+      ).toStdWString();
+    return true;
+  },
+    [&](medusa::BinaryStream::SharedPtr bs, medusa::Database::SharedPtr& db, medusa::Loader::SharedPtr& ldr, medusa::Architecture::VectorSharedPtr& archs, medusa::OperatingSystem::SharedPtr& os)
+  {
+    ConfigureDialog CfgDlg(this, bs);
+    if (CfgDlg.exec() == QDialog::Rejected)
       return false;
 
-    // Opening file and loading module
-    _medusa.Open(this->_fileName.toStdWString());
-    _medusa.LoadModules(L".");
+    db    = CfgDlg.GetSelectedDatabase();
+    ldr   = CfgDlg.GetSelectedLoader();
+    archs = CfgDlg.GetSelectedArchitectures();
+    os    = CfgDlg.GetSelectedOperatingSystem();
 
-    emit logAppended(QString("Opening %1\n").arg(this->_fileName));
-
-    medusa::Loader::VectorSharedPtr const & loaders = modMgr.GetLoaders();
-
-    // If no compatible loader was found
-    if (loaders.empty())
-    {
-      QMessageBox::critical(this, tr("Loader error"), tr("There is no supported loader for this file"));
-      this->closeDocument();
-      return false;
-    }
-
-    // Select arch
-    medusa::Architecture::VectorSharedPtr const & archis = modMgr.GetArchitectures();
-
-    // If no compatible arch was found
-    if (archis.empty())
-    {
-      QMessageBox::critical(this, tr("Architecture error"), tr("There is no supported architecture for this file"));
-      this->closeDocument();
-      return false;
-    }
-
-    medusa::Loader::SharedPtr loader;
-    medusa::Architecture::SharedPtr architecture;
-    medusa::OperatingSystem::SharedPtr os;
-
-    LoaderChooser lc(this, _medusa);
-    if (!lc.getSelection(loader, architecture, os))
-    {
-      this->closeDocument();
-      return false;
-    }
-
-    this->_selectedLoader = loader;
-    modMgr.RegisterArchitecture(architecture);
-
-    this->statusbar->showMessage(tr("Interpreting executable format using ") + QString::fromStdString(loader->GetName()));
-    loader->Map();
+    return true;
+  },
+    [&](void)
+  {
+    // Widgets initialisation must be called before file mapping... Except scrollbar address
+    auto memAreaView = new MemoryAreaView(this, _medusa);
+    this->memAreaDock->setWidget(memAreaView);
+    connect(memAreaView, SIGNAL(goTo(medusa::Address const&)), this, SLOT(goTo(medusa::Address const&)));
 
     auto labelView = new LabelView(this, _medusa);
-    this->infoDock->setWidget(labelView);
+    this->labelDock->setWidget(labelView);
+    connect(labelView,   SIGNAL(goTo(medusa::Address const&)), this, SLOT(goTo(medusa::Address const&)));
 
+    return true;
+  },
+    [&]()
+  {
+    // FIXME If this is placed before mapping, it leads to a div to 0
     auto sbAddr = new ScrollbarAddress(this, _medusa);
     this->addressDock->setWidget(sbAddr);
+    connect(sbAddr, SIGNAL(goTo(medusa::Address const&)), this, SLOT(goTo(medusa::Address const&)));
 
-    //this->_medusa.SetOperatingSystem(os);
-    this->_medusa.StartAsync(loader, architecture, os);
-
+    this->actionOpen->setEnabled(false);
+    this->actionLoad->setEnabled(false);
     this->actionGoto->setEnabled(true);
+    this->actionClose->setEnabled(true);
     this->_documentOpened = true;
     this->setWindowTitle("Medusa - " + this->_fileName);
 
-    addDisassemblyView(loader->GetEntryPoint());
+    addDisassemblyView(_medusa.GetDocument().GetStartAddress());
 
-    connect(labelView, SIGNAL(goTo(medusa::Address const&)), this, SLOT(goTo(medusa::Address const&)));
+    return true;
+  });
+}
 
-  }
-  catch (medusa::Exception const& e)
-  {
-    QMessageBox::critical(this, "Error", QString::fromStdWString(e.What()));
-    this->closeDocument();
+bool MainWindow::loadDocument()
+{
+  if (_documentOpened)
     return false;
-  }
+
+  if (!_medusa.OpenDocument([&](
+    fs::path& rDatabasePath,
+    std::list<medusa::Medusa::Filter> const& rExtensionFilter
+    )
+  {
+    QStringList Filters;
+    for (auto itFlt = std::begin(rExtensionFilter), itEnd = std::end(rExtensionFilter); itFlt != itEnd; ++itFlt)
+    {
+      Filters.push_back(QString("%1 (*%2)").arg(std::get<0>(*itFlt).c_str(), std::get<1>(*itFlt).c_str()));
+    }
+    rDatabasePath = QFileDialog::getOpenFileName(this, "Select a saved database", QString(), Filters.join(";;")).toStdString();
+    if (rDatabasePath.empty())
+      return false;
+    _fileName = QString::fromStdString(rDatabasePath.string());
+    return true;
+  }))
+    return false;
+
+  // Widgets initialisation must be called before file mapping... Except scrollbar address
+  auto memAreaView = new MemoryAreaView(this, _medusa);
+  memAreaView->Refresh();
+  this->memAreaDock->setWidget(memAreaView);
+
+  auto labelView = new LabelView(this, _medusa);
+  labelView->Refresh();
+  this->labelDock->setWidget(labelView);
+
+  //medusa::Architecture::VectorSharedPtr archs;
+  //archs.push_back(architecture);
+  //this->_medusa.Start(db->GetBinaryStream(), db, loader, archs, os);
+
+  // FIXME If this is placed before mapping, it leads to a div to 0
+  auto sbAddr = new ScrollbarAddress(this, _medusa);
+  sbAddr->Refresh();
+  this->addressDock->setWidget(sbAddr);
+
+  this->actionOpen->setEnabled(false);
+  this->actionLoad->setEnabled(false);
+  this->actionGoto->setEnabled(true);
+  this->actionClose->setEnabled(true);
+  this->_documentOpened = true;
+  this->setWindowTitle("Medusa - " + this->_fileName);
+
+  addDisassemblyView(_medusa.GetDocument().GetStartAddress());
+
+  connect(labelView,   SIGNAL(goTo(medusa::Address const&)), this,                 SLOT(goTo(medusa::Address const&)));
+  connect(sbAddr,      SIGNAL(goTo(medusa::Address const&)), this,                 SLOT(goTo(medusa::Address const&)));
+  connect(memAreaView, SIGNAL(goTo(medusa::Address const&)), this,                 SLOT(goTo(medusa::Address const&)));
+  connect(this,        SIGNAL(lastAddressUpdated(medusa::Address const&)), sbAddr, SLOT(setCurrentAddress(medusa::Address const&)));
 
   return true;
 }
 
 bool MainWindow::saveDocument()
 {
-  auto& modMgr = medusa::ModuleManager::Instance();
-  emit logAppended("Saving document...");
-  auto db = modMgr.GetDatabase("Text");
-
-  if (db == nullptr)
-    return false;
-
-  QString path = _fileName + QString::fromStdString(db->GetExtension());
-  if (db->Create(path.toStdWString()) == false)
-  {
-    medusa::Log::Write("qt") << "Can't save file " << path.toStdWString();
-    return false;
-  }
-  db->SaveDocument(_medusa.GetDocument());
-  db->Close();
-  return true;
+  return _medusa.GetDocument().Flush();
 }
 
 bool MainWindow::closeDocument()
 {
+  if (!_documentOpened)
+    return false;
+
+  int Result = QMessageBox::question(
+    this, "Quit", "Do you wish to save the current document before quitting?",
+    QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel);
+  switch (Result)
+  {
+  case QMessageBox::Yes:
+    _medusa.GetDocument().Flush();
+    break;
+
+  case QMessageBox::No:
+    break;
+
+  default:
+    return false;
+  }
+
   this->_documentOpened = false;
+  this->actionOpen->setEnabled(true);
+  this->actionLoad->setEnabled(true);
   this->actionClose->setEnabled(false);
   this->actionGoto->setEnabled(false);
 
-  this->logEdit->clear();
-  auto labelView = this->infoDock->widget();
-  disconnect(labelView, SIGNAL(goTo(medusa::Address const&)), this, SLOT(goTo(medusa::Address const&)));
-  this->infoDock->setWidget(nullptr);
+  if (!_medusa.CloseDocument())
+    return false;
+
+  //this->logEdit->clear();
+  auto labelView = this->labelDock->widget();
+  this->labelDock->setWidget(nullptr);
   delete labelView;
 
   int tabWidgetCount = this->tabWidget->count();
@@ -170,22 +225,20 @@ bool MainWindow::closeDocument()
     delete curWidget;
   }
 
-  _medusa.Close();
-
   return true;
 }
 
-void MainWindow::appendLog(std::wstring const& msg)
+void MainWindow::appendLog(std::string const& msg)
 {
-  emit logAppended(QString::fromStdWString(msg));
+  emit logAppended(QString::fromStdString(msg));
 }
 
 void MainWindow::addDisassemblyView(medusa::Address const& startAddr)
 {
-  if (_medusa.IsOpened() == false)
-    return;
   auto disasmView = new DisassemblyView(this, &_medusa);
-  this->tabWidget->addTab(disasmView, "Disassembly (text)");
+  connect(disasmView, SIGNAL(cursorAddressUpdated(medusa::Address const&)), this->addressDock->widget(), SLOT(setCurrentAddress(medusa::Address const&)));
+  connect(disasmView, SIGNAL(cursorAddressUpdated(medusa::Address const&)), this, SLOT(setCurrentAddress(medusa::Address const&)));
+  this->tabWidget->addTab(disasmView, QIcon(":/icons/view-disassembly.png"), "Disassembly (text)");
   disasmView->goTo(startAddr);
 }
 
@@ -198,27 +251,23 @@ void MainWindow::addSemanticView(medusa::Address const& funcAddr)
   auto lbl = _medusa.GetDocument().GetLabelFromAddress(funcAddr);
   QString funcLbl = QString::fromStdString(funcAddr.ToString());
   if (lbl.GetType() != medusa::Label::Unknown)
-    funcLbl = QString::fromStdString(lbl.GetName());
+    funcLbl = QString::fromStdString(lbl.GetLabel());
 
   auto semView = new SemanticView(this, _medusa, funcAddr);
-  this->tabWidget->addTab(semView, QString("Semantic of function %1").arg(funcLbl));
+  this->tabWidget->addTab(semView, QIcon(":/icons/view-semantic.png"), QString("Semantic of function %1").arg(funcLbl));
 }
 
 void MainWindow::addControlFlowGraphView(medusa::Address const& funcAddr)
 {
-  auto func = _medusa.GetMultiCell(funcAddr);
-  if (func == nullptr || func->GetType() != medusa::MultiCell::FunctionType)
-    return;
-
   auto lbl = _medusa.GetDocument().GetLabelFromAddress(funcAddr);
   QString funcLbl = QString::fromStdString(funcAddr.ToString());
   if (lbl.GetType() != medusa::Label::Unknown)
-    funcLbl = QString::fromStdString(lbl.GetName());
+    funcLbl = QString::fromStdString(lbl.GetLabel());
 
   auto cfgView = new ControlFlowGraphView(this);
-  auto cfgScene = new ControlFlowGraphScene(this->tabWidget, _medusa, *static_cast<medusa::Function const*>(func));
+  auto cfgScene = new ControlFlowGraphScene(this->tabWidget, _medusa, funcAddr);
   cfgView->setScene(cfgScene);
-  this->tabWidget->addTab(cfgView, QString("Graph of function %1").arg(funcLbl));
+  this->tabWidget->addTab(cfgView, QIcon(":/icons/view-graph.png"), QString("Graph of function %1").arg(funcLbl));
 }
 
 void MainWindow::on_actionAbout_triggered()
@@ -232,7 +281,9 @@ void MainWindow::on_actionOpen_triggered()
   // Confirmation dialog
   if (this->_documentOpened)
   {
-    if (this->_openConfirmation.exec() == QDialog::Rejected)
+    int Reply = QMessageBox::question(this, "Confirmation", "Are you sure you want to close this document?", QMessageBox::Yes | QMessageBox::No);
+
+    if (Reply == QMessageBox::No)
       return;
 
     if (!this->closeDocument())
@@ -241,6 +292,11 @@ void MainWindow::on_actionOpen_triggered()
     this->_openDocument = true;
   }
   this->openDocument();
+}
+
+void MainWindow::on_actionLoad_triggered()
+{
+  this->loadDocument();
 }
 
 void MainWindow::on_actionSave_triggered()
@@ -264,9 +320,7 @@ void MainWindow::on_actionGoto_triggered()
 
 void MainWindow::on_actionDisassembly_triggered()
 {
-  if (_medusa.IsOpened() == false)
-    return;
-  addDisassemblyView(_selectedLoader->GetEntryPoint());
+  addDisassemblyView(_medusa.GetDocument().GetAddressFromLabelName("start"));
 }
 
 void MainWindow::on_actionSettings_triggered()
@@ -283,7 +337,11 @@ void MainWindow::on_tabWidget_tabCloseRequested(int index)
 
 void MainWindow::onLogMessageAppended(QString const & msg)
 {
+  //https://qt-project.org/forums/viewthread/19083
+  bool DoScroll = (logEdit->verticalScrollBar()->sliderPosition() == logEdit->verticalScrollBar()->maximum());
   logEdit->insertPlainText(msg);
+  if (DoScroll)
+    logEdit->verticalScrollBar()->setSliderPosition(logEdit->verticalScrollBar()->maximum());
 }
 
 void MainWindow::goTo(medusa::Address const& addr)
@@ -293,12 +351,27 @@ void MainWindow::goTo(medusa::Address const& addr)
   if (disasmView == nullptr)
     return;
   if (!disasmView->goTo(addr))
+  {
     QMessageBox::warning(this, "Invalid address", "This address looks invalid");
+  }
+  emit lastAddressUpdated(addr);
+}
+
+void MainWindow::setCurrentAddress(medusa::Address const& addr)
+{
+  medusa::TOffset Off;
+  QString OffStr = "";
+  if (!_medusa.GetDocument().ConvertAddressToFileOffset(addr, Off))
+    OffStr = "(unknown)";
+  else
+    OffStr.sprintf("0x%016x", Off);
+  statusBar()->showMessage(QString("va: %1 \xE2\x86\x92 offset: %2").arg(QString::fromStdString(addr.ToString()), OffStr));
 }
 
 void MainWindow::closeEvent(QCloseEvent * event)
 {
-  Settings::instance().setValue(WINDOW_LAYOUT, this->saveState());
-  Settings::instance().setValue(WINDOW_GEOMETRY, this->saveGeometry());
+  medusa::UserConfiguration UserCfg;
+  UserCfg.SetOption("ui_qt.geometry", medusa::Base64Encode(std::string(saveGeometry().constData(), saveGeometry().length())));
+  UserCfg.SetOption("ui_qt.state", medusa::Base64Encode(std::string(saveState().constData(), saveState().length())));
   event->accept();
 }

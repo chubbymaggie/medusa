@@ -32,7 +32,7 @@ private:
   public:
     virtual char const* ConvertIdentifierToName(u32 Id) const;
     virtual u32 ConvertNameToIdentifier(std::string const& rName) const;
-    virtual u32 GetRegisterByType(CpuInformation::Type RegType) const;
+    virtual u32 GetRegisterByType(CpuInformation::Type RegType, u8 Mode) const;
     virtual u32 GetSizeOfRegisterInBit(u32 Id) const;
     virtual bool IsRegisterAliased(u32 Id0, u32 Id1) const;
   } m_CpuInfo;
@@ -42,9 +42,14 @@ public:
 
   virtual std::string           GetName(void) const { return "Nintendo GameBoy Z80"; }
   virtual bool                  Translate(Address const& rVirtAddr, TOffset& rPhyslOff);
-  virtual bool                  Disassemble(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn);
-  virtual void                  FillConfigurationModel(ConfigurationModel& rCfgMdl);
-
+  virtual bool                  Disassemble(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  virtual NamedModeVector       GetModes(void) const
+  {
+    NamedModeVector GbModes;
+    GbModes.reserve(1);
+    GbModes.push_back(NamedMode("gameboy", 0));
+    return GbModes;
+  }
   virtual EEndianness           GetEndianness(void) { return LittleEndian; }
   virtual CpuInformation const* GetCpuInformation(void) const { return &m_CpuInfo; }
   virtual CpuContext*           MakeCpuContext(void) const { return nullptr; }
@@ -64,7 +69,6 @@ private:
   static TRegName      const m_RegName  [];
 
   u16  GetRegisterByOpcode(u8 Opcode);
-  void FormatOperand(Operand& Op, TOffset Offset);
 
   bool Insn_Invalid(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn);
   bool Insn_Nop(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn);

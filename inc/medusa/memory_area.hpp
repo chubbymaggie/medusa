@@ -36,18 +36,42 @@ public:
       return pMA0->GetBaseAddress() < pMA1->GetBaseAddress();
     }
   };
-  MemoryArea(std::string const& rName, u32 Access) : m_Name(rName), m_Access(Access) {}
+
+  typedef std::function<void (TOffset, CellData::SPtr)> CellDataPredicat;
+
+  MemoryArea(
+    std::string const& rName,
+    u32 Access,
+    Tag DefaultArchitectureTag,
+    u8 DefaultArchitectureMode);
+  virtual ~MemoryArea(void);
+
+  virtual std::string Dump(void) const = 0;
 
   // Information methods
-  virtual std::string const& GetName(void)   const { return m_Name;   }
-  virtual u32                GetAccess(void) const { return m_Access; }
-  virtual u32                GetSize(void)   const = 0;
-  virtual std::string        ToString(void)  const = 0;
+  virtual std::string const& GetName(void)             const { return m_Name;   }
+  virtual u32                GetAccess(void)           const { return m_Access; }
+  virtual u32                GetSize(void)             const = 0;
+  virtual std::string        ToString(void)            const = 0;
+  /*    */Tag                GetArchitectureTag(void)  const { return m_DefaultArchitectureTag; }
+  /*    */u8                 GetArchitectureMode(void) const { return m_DefaultArchitectureMode; }
+
+  virtual TOffset            GetFileOffset(void) const = 0;
+  virtual u32                GetFileSize(void)   const = 0;
 
   // Cell methods
   virtual CellData::SPtr GetCellData(TOffset Offset) const = 0;
   virtual bool           SetCellData(TOffset Offset, CellData::SPtr spCell, Address::List& rDeletedCellAddresses, bool Force) = 0;
-  virtual bool           IsCellPresent(TOffset Offset) const = 0;
+  virtual void           ForEachCellData(CellDataPredicat Predicat) const = 0;
+
+  bool IsCellPresent(Address const& rAddress) const
+  {
+    if (GetBaseAddress().GetBase() != rAddress.GetBase())
+      return false;
+    return IsCellPresent(rAddress.GetOffset());
+  }
+  bool IsCellPresent(TOffset Offset) const
+  { return GetBaseAddress().IsBetween(GetSize(), Offset); }
 
   // Address methods
   virtual Address GetBaseAddress(void) const = 0;
@@ -63,30 +87,40 @@ public:
 
 protected:
   std::string m_Name;
-  u32 m_Access;
+  u32         m_Access;
+  Tag         m_DefaultArchitectureTag;
+  u8          m_DefaultArchitectureMode;
 };
 
 class Medusa_EXPORT MappedMemoryArea : public MemoryArea
 {
-
 public:
   MappedMemoryArea(
     std::string const& rName,
     TOffset FileOffset, u32 FileSize,
     Address const& rVirtualBase,  u32 VirtualSize,
-    u32 Access
+    u32 Access,
+    Tag DefaultArchitectureTag = MEDUSA_ARCH_UNK,
+    u8 DefaultArchitectureMode = 0
     )
-    : MemoryArea(rName, Access)
+    : MemoryArea(rName, Access, DefaultArchitectureTag, DefaultArchitectureMode)
     , m_FileOffset(FileOffset), m_FileSize(FileSize)
     , m_VirtualBase(rVirtualBase), m_VirtualSize(VirtualSize)
   {}
 
+  virtual ~MappedMemoryArea(void);
+
+  virtual std::string Dump(void) const;
+
   virtual u32         GetSize(void)  const;
   virtual std::string ToString(void) const;
 
+  virtual TOffset     GetFileOffset(void) const;
+  virtual u32         GetFileSize(void)   const;
+
   virtual CellData::SPtr GetCellData(TOffset Offset) const;
   virtual bool           SetCellData(TOffset Offset, CellData::SPtr spCellData, Address::List& rDeletedCellAddresses, bool Force);
-  virtual bool           IsCellPresent(TOffset Offset) const;
+  virtual void           ForEachCellData(CellDataPredicat Predicat) const;
 
   virtual Address GetBaseAddress(void) const;
   virtual Address MakeAddress(TOffset Offset) const;
@@ -102,14 +136,13 @@ public:
 protected:
   bool _GetPreviousCellOffset(TOffset Offset, TOffset& rPreviousOffset) const;
 
-  typedef std::pair<TOffset, CellData::SPtr> CellDataPairType;
-  typedef std::vector<CellDataPairType> CellDataMapType;
+  typedef std::vector<CellData::SPtr> CellDataVectorType;
 
-  TOffset         m_FileOffset;
-  u32             m_FileSize;
-  Address         m_VirtualBase;
-  u32             m_VirtualSize;
-  CellDataMapType m_Cells;
+  TOffset            m_FileOffset;
+  u32                m_FileSize;
+  Address            m_VirtualBase;
+  u32                m_VirtualSize;
+  CellDataVectorType m_Cells;
 
   typedef boost::mutex    MutexType;
   mutable MutexType       m_Mutex;
@@ -121,18 +154,27 @@ public:
   VirtualMemoryArea(
     std::string const& rName,
     Address const& rVirtualBase,  u32 VirtualSize,
-    u32 Access
+    u32 Access,
+    Tag DefaultArchitectureTag = MEDUSA_ARCH_UNK,
+    u8 DefaultArchitectureMode = 0
     )
-    : MemoryArea(rName, Access)
+    : MemoryArea(rName, Access, DefaultArchitectureTag, DefaultArchitectureMode)
     , m_VirtualBase(rVirtualBase), m_VirtualSize(VirtualSize)
   {}
+
+  virtual ~VirtualMemoryArea(void);
+
+  virtual std::string Dump(void) const;
 
   virtual u32         GetSize(void)  const;
   virtual std::string ToString(void) const;
 
+  virtual TOffset     GetFileOffset(void) const;
+  virtual u32         GetFileSize(void)   const;
+
   virtual CellData::SPtr GetCellData(TOffset Offset) const;
   virtual bool           SetCellData(TOffset Offset, CellData::SPtr spCellData, Address::List& rDeletedCellAddresses, bool Force);
-  virtual bool           IsCellPresent(TOffset Offset) const;
+  virtual void           ForEachCellData(CellDataPredicat Predicat) const;
 
   virtual Address GetBaseAddress(void) const;
   virtual Address MakeAddress(TOffset Offset) const;
@@ -147,7 +189,7 @@ public:
 
 protected:
   Address m_VirtualBase;
-  u32 m_VirtualSize;
+  u32     m_VirtualSize;
 };
 
 MEDUSA_NAMESPACE_END

@@ -2,6 +2,8 @@
 #define _MEDUSA_CELL_ACTION_
 
 #include <string>
+#include <map>
+
 #include <boost/bind.hpp>
 #include <boost/range/algorithm_ext/erase.hpp>
 
@@ -10,178 +12,44 @@
 #include "medusa/types.hpp"
 
 #include "medusa/cell.hpp"
+#include "medusa/architecture.hpp"
 #include "medusa/medusa.hpp"
 
 MEDUSA_NAMESPACE_BEGIN
 
-class Medusa_EXPORT CellAction
+class Medusa_EXPORT Action
 {
 public:
-  typedef CellAction* Ptr;
-  typedef std::list<Ptr> PtrList;
+  typedef std::shared_ptr<Action> SPtr;
+  typedef std::list<SPtr> SPtrList;
 
-  virtual std::string GetName(void)                   const { return "No name";             }
-  virtual std::string GetDescription(void)            const { return "No description";      }
-  virtual bool        IsCompatible(Cell const& rCell) const { return false;                 }
-  virtual void        Do(Medusa& rCore, Address::List const& rAddrList) { }
+  typedef SPtr (*CreateType)(Medusa& rCore);
+  typedef std::map<char const*, CreateType> MapType;
 
-  static void GetCellActionBuilders(PtrList& rActList);
-  static void GetCellActionBuilders(Cell const& rCell, PtrList& rActList);
-};
+  typedef std::pair<Address, Address> RangeAddress;
 
-class CellAction_Undefine : public CellAction
-{
-public:
-  virtual std::string GetName(void) const
-  { return "Undefine"; }
+  static SPtr        Create(Medusa& rCore);
+  static char const* GetBindingName(void);
 
-  virtual std::string GetDescription(void) const
-  { return "This option converts the selected item to byte"; }
+  virtual ~Action(void) {}
 
-  virtual bool IsCompatible(Cell const& rCell) const
-  { return rCell.GetType() != CellData::ValueType || rCell.GetLength() != 1; }
+  virtual std::string GetName(void) const = 0;
+  virtual std::string GetDescription(void) const = 0;
+  virtual std::string GetIconName(void) const = 0;
+  virtual bool        IsCompatible(RangeAddress const& rRangeAddress, u8 Index) const = 0;
+  virtual void        Do(RangeAddress const& rRangeAddress, u8 Index) = 0;
 
-  virtual void Do(Medusa& rCore, Address::List const& rAddrList);
-};
+  static MapType  GetMap(void);
+  static SPtrList GetSpecificActions(Medusa& rCore, Address const& rAddress);
 
-class CellAction_ToWord : public CellAction
-{
-public:
-  virtual std::string GetName(void) const
-  { return "Set to word"; }
+protected:
+  Action(Medusa& rCore) : m_rCore(rCore) {}
 
-  virtual std::string GetDescription(void) const
-  { return "Set the current value to word type"; }
+  Medusa& m_rCore;
 
-  virtual bool IsCompatible(Cell const& rCell) const
-  { return rCell.GetType() != CellData::ValueType || rCell.GetLength() != 2; }
-
-  virtual void Do(Medusa& rCore, Address::List const& rAddrList);
-};
-
-class CellAction_ToDword : public CellAction
-{
-public:
-  virtual std::string GetName(void) const
-  { return "Set to dword"; }
-
-  virtual std::string GetDescription(void) const
-  { return "Set the current value to dword type"; }
-
-  virtual bool IsCompatible(Cell const& rCell) const
-  { return rCell.GetType() != CellData::ValueType || rCell.GetLength() != 4; }
-
-  virtual void Do(Medusa& rCore, Address::List const& rAddrList);
-};
-
-class CellAction_ToQword : public CellAction
-{
-public:
-  virtual std::string GetName(void) const
-  { return "Set to qword"; }
-
-  virtual std::string GetDescription(void) const
-  { return "Set the current value to qword type"; }
-
-  virtual bool IsCompatible(Cell const& rCell) const { return rCell.GetType() != CellData::ValueType || rCell.GetLength() != 8; }
-
-  virtual void Do(Medusa& rCore, Address::List const& rAddrList);
-};
-
-class CellAction_ChangeValueSize : public CellAction
-{
-public:
-  virtual std::string GetName(void) const
-  { return "Change value size"; }
-
-  virtual std::string GetDescription(void) const
-  { return "This option allows to change the size of a value (byte, word, dword, qword)"; }
-
-  virtual bool IsCompatible(Cell const& rCell) const
-  { return rCell.GetType() == CellData::ValueType; }
-
-  virtual void Do(Medusa& rCore, Address::List const& rAddrList);
-};
-
-class CellAction_Disassemble : public CellAction
-{
-public:
-  virtual std::string GetName(void) const
-  { return "Disassemble"; }
-
-  virtual std::string GetDescription(void) const
-  { return "Disassemble using the default architecture module"; }
-
-  virtual bool IsCompatible(Cell const& rCell) const
-  { return rCell.GetType() != CellData::InstructionType; }
-
-  virtual void Do(Medusa& rCore, Address::List const& rAddrList);
-};
-
-class CellAction_Analyze : public CellAction
-{
-public:
-  virtual std::string GetName(void) const
-  { return "Analyze"; }
-
-  virtual std::string GetDescription(void) const
-  { return "Analyze using the default architecture module"; }
-
-  virtual bool IsCompatible(Cell const& rCell) const
-  { return rCell.GetType() != CellData::InstructionType; }
-
-  virtual void Do(Medusa& rCore, Address::List const& rAddrList);
-};
-
-class CellAction_CreateFunction : public CellAction
-{
-public:
-  virtual std::string GetName(void) const
-  { return "Create function"; }
-
-  virtual std::string GetDescription(void) const
-  { return "Create a new function from the current address"; }
-
-  virtual bool IsCompatible(Cell const& rCell) const
-  { return rCell.GetType() == CellData::InstructionType; } // LATER: check if the function doesn't alreayd exist
-
-  virtual void Do(Medusa& rCore, Address::List const& rAddrList);
-};
-
-class CellAction_ToAsciiString : public CellAction
-{
-public:
-  virtual std::string GetName(void) const
-  { return "To ASCII string"; }
-
-  virtual std::string GetDescription(void) const
-  { return "Make an ASCII string"; }
-
-  virtual bool IsCompatible(Cell const& rCell) const
-  { return rCell.GetType() != CellData::StringType; }
-
-  virtual void Do(Medusa& rCore, Address::List const& rAddrList);
-};
-
-class CellAction_ToWindowsString : public CellAction
-{
-public:
-  virtual std::string GetName(void) const
-  { return "To windows string"; }
-
-  virtual std::string GetDescription(void) const
-  { return "Make an windows string"; }
-
-  virtual bool IsCompatible(Cell const& rCell) const
-  { return rCell.GetType() != CellData::StringType; }
-
-  virtual void Do(Medusa& rCore, Address::List const& rAddrList);
-};
-
-
-
-class MultiCellAction
-{
+private:
+  Action(Action const&);
+  Action& operator=(Action const&);
 };
 
 MEDUSA_NAMESPACE_END

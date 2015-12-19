@@ -32,8 +32,8 @@ class Medusa_EXPORT ContextExpression : public Expression
 public:
   virtual ~ContextExpression(void) {}
 
-  virtual bool Read(CpuContext *pCpuCtxt, MemoryContext* pMemCtxt, VariableContext* pVarCtxt, u64& rValue) const = 0;
-  virtual bool Write(CpuContext *pCpuCtxt, MemoryContext* pMemCtxt, VariableContext* pVarCtxt, u64 Value) = 0;
+  virtual bool Read(CpuContext *pCpuCtxt, MemoryContext* pMemCtxt, VariableContext* pVarCtxt, u64& rValue, bool SignExtend = false) const = 0;
+  virtual bool Write(CpuContext *pCpuCtxt, MemoryContext* pMemCtxt, VariableContext* pVarCtxt, u64 Value, bool SignExtend = false) = 0;
   virtual bool GetAddress(CpuContext *pCpuCtxt, MemoryContext* pMemCtxt, VariableContext* pVarCtxt, Address& rAddress) const = 0;
 };
 
@@ -85,9 +85,7 @@ private:
 class Medusa_EXPORT BindExpression : public Expression
 {
 public:
-  BindExpression(Expression::List const& rExprs)
-    : m_Expressions(rExprs) {}
-
+  BindExpression(Expression::List const& rExprs);
   virtual ~BindExpression(void);
 
   virtual std::string ToString(void) const;
@@ -118,8 +116,7 @@ public:
     CondSle
   };
 
-  ConditionExpression(Type CondType, Expression *pRefExpr, Expression *pTestExpr)
-    : m_Type(CondType), m_pRefExpr(pRefExpr), m_pTestExpr(pTestExpr) {}
+  ConditionExpression(Type CondType, Expression *pRefExpr, Expression *pTestExpr);
 
   virtual ~ConditionExpression(void);
 
@@ -128,6 +125,10 @@ public:
   virtual u32 GetSizeInBit(void) const { return 0; }
   virtual Expression* Visit(ExpressionVisitor* pVisitor) const { return pVisitor->VisitCondition(m_Type, m_pRefExpr, m_pTestExpr); }
   virtual bool SignExtend(u32 NewSizeInBit) { return false; }
+
+  Type GetType(void) const { return m_Type; }
+  Expression* GetReferenceExpression(void) const { return m_pRefExpr; }
+  Expression* GetTestExpression(void) const { return m_pTestExpr; }
 
 protected:
   Type m_Type;
@@ -138,11 +139,8 @@ protected:
 class Medusa_EXPORT IfConditionExpression : public ConditionExpression
 {
 public:
-  IfConditionExpression(Type CondType, Expression *pRefExpr, Expression *pTestExpr, Expression *pThenExpr)
-    : ConditionExpression(CondType, pRefExpr, pTestExpr), m_pThenExpr(pThenExpr) {}
-  IfConditionExpression(ConditionExpression* pCondExpr, Expression *pThenExpr) // FIXME: memleak
-    : ConditionExpression(*pCondExpr), m_pThenExpr(pThenExpr) { }
-
+  IfConditionExpression(Type CondType, Expression *pRefExpr, Expression *pTestExpr, Expression *pThenExpr);
+  IfConditionExpression(ConditionExpression* pCondExpr, Expression *pThenExpr);
   virtual ~IfConditionExpression(void);
 
   virtual std::string ToString(void) const;
@@ -158,11 +156,8 @@ protected:
 class Medusa_EXPORT IfElseConditionExpression : public IfConditionExpression
 {
 public:
-  IfElseConditionExpression(Type CondType, Expression *pRefExpr, Expression *pTestExpr, Expression *pThenExpr, Expression *pElseExpr)
-    : IfConditionExpression(CondType, pRefExpr, pTestExpr, pThenExpr), m_pElseExpr(pElseExpr) {}
-  IfElseConditionExpression(ConditionExpression* pCondExpr, Expression *pThenExpr, Expression *pElseExpr) // FIXME: memleak
-    : IfConditionExpression(pCondExpr, pThenExpr), m_pElseExpr(pElseExpr) { }
-
+  IfElseConditionExpression(Type CondType, Expression *pRefExpr, Expression *pTestExpr, Expression *pThenExpr, Expression *pElseExpr);
+  IfElseConditionExpression(ConditionExpression* pCondExpr, Expression *pThenExpr, Expression *pElseExpr);
   virtual ~IfElseConditionExpression(void);
 
   virtual std::string ToString(void) const;
@@ -178,11 +173,8 @@ protected:
 class Medusa_EXPORT WhileConditionExpression : public ConditionExpression
 {
 public:
-  WhileConditionExpression(Type CondType, Expression *pRefExpr, Expression *pTestExpr, Expression *pBodyExpr)
-    : ConditionExpression(CondType, pRefExpr, pTestExpr), m_pBodyExpr(pBodyExpr) {}
-  WhileConditionExpression(ConditionExpression* pCondExpr, Expression *pBodyExpr) // FIXME: memleak
-    : ConditionExpression(*pCondExpr), m_pBodyExpr(pBodyExpr) { }
-
+  WhileConditionExpression(Type CondType, Expression *pRefExpr, Expression *pTestExpr, Expression *pBodyExpr);
+  WhileConditionExpression(ConditionExpression* pCondExpr, Expression *pBodyExpr); // FIXME: memleak
   virtual ~WhileConditionExpression(void);
 
   virtual std::string ToString(void) const;
@@ -217,9 +209,7 @@ public:
   };
 
   //! pLeftExpr and pRightExpr must be allocated by standard new
-  OperationExpression(Type OpType, Expression *pLeftExpr, Expression *pRightExpr)
-    : m_OpType(OpType), m_pLeftExpr(pLeftExpr), m_pRightExpr(pRightExpr) {}
-
+  OperationExpression(Type OpType, Expression *pLeftExpr, Expression *pRightExpr);
   virtual ~OperationExpression(void);
 
   virtual std::string ToString(void) const;
@@ -255,12 +245,7 @@ public:
     ConstSigned     = 0x80000000
   };
 
-  ConstantExpression(u32 ConstType, u64 Value)
-    : m_ConstType(ConstType), m_Value(
-        ConstType == ConstUnknownBit ||
-        ConstType == Const64Bit ?
-        Value : (Value & ((1ULL << m_ConstType) - 1))) {}
-
+  ConstantExpression(u32 ConstType, u64 Value);
   virtual ~ConstantExpression(void) {}
 
   virtual std::string ToString(void) const;
@@ -269,8 +254,8 @@ public:
   virtual Expression* Visit(ExpressionVisitor* pVisitor) const { return pVisitor->VisitConstant(m_ConstType, m_Value); }
   virtual bool SignExtend(u32 NewSizeInBit);
 
-  virtual bool Read(CpuContext *pCpuCtxt, MemoryContext* pMemCtxt, VariableContext* pVarCtxt, u64& rValue) const;
-  virtual bool Write(CpuContext *pCpuCtxt, MemoryContext* pMemCtxt, VariableContext* pVarCtxt, u64 Value);
+  virtual bool Read(CpuContext *pCpuCtxt, MemoryContext* pMemCtxt, VariableContext* pVarCtxt, u64& rValue, bool SignExtend = false) const;
+  virtual bool Write(CpuContext *pCpuCtxt, MemoryContext* pMemCtxt, VariableContext* pVarCtxt, u64 Value, bool SignExtend = false);
   virtual bool GetAddress(CpuContext *pCpuCtxt, MemoryContext* pMemCtxt, VariableContext* pVarCtxt, Address& rAddress) const;
 
   u64          GetConstant(void) const { return m_Value; }
@@ -294,8 +279,8 @@ public:
   virtual Expression* Visit(ExpressionVisitor* pVisitor) const { return pVisitor->VisitIdentifier(m_Id, m_pCpuInfo); }
   virtual bool SignExtend(u32 NewSizeInBit) { return false; }
 
-  virtual bool Read(CpuContext *pCpuCtxt, MemoryContext* pMemCtxt, VariableContext* pVarCtxt, u64& rValue) const;
-  virtual bool Write(CpuContext *pCpuCtxt, MemoryContext* pMemCtxt, VariableContext* pVarCtxt, u64 Value);
+  virtual bool Read(CpuContext *pCpuCtxt, MemoryContext* pMemCtxt, VariableContext* pVarCtxt, u64& rValue, bool SignExtend = false) const;
+  virtual bool Write(CpuContext *pCpuCtxt, MemoryContext* pMemCtxt, VariableContext* pVarCtxt, u64 Value, bool SignExtend = false);
   virtual bool GetAddress(CpuContext *pCpuCtxt, MemoryContext* pMemCtxt, VariableContext* pVarCtxt, Address& rAddress) const;
 
   u32 GetId(void) const { return m_Id; }
@@ -320,8 +305,8 @@ public:
   virtual Expression* Visit(ExpressionVisitor* pVisitor) const { return pVisitor->VisitMemory(m_AccessSizeInBit, m_pExprBase, m_pExprOffset, m_Dereference); }
   virtual bool SignExtend(u32 NewSizeInBit) { return false; }
 
-  virtual bool Read(CpuContext *pCpuCtxt, MemoryContext* pMemCtxt, VariableContext* pVarCtxt, u64& rValue) const;
-  virtual bool Write(CpuContext *pCpuCtxt, MemoryContext* pMemCtxt, VariableContext* pVarCtxt, u64 Value);
+  virtual bool Read(CpuContext *pCpuCtxt, MemoryContext* pMemCtxt, VariableContext* pVarCtxt, u64& rValue, bool SignExtend = false) const;
+  virtual bool Write(CpuContext *pCpuCtxt, MemoryContext* pMemCtxt, VariableContext* pVarCtxt, u64 Value, bool SignExtend = false);
   virtual bool GetAddress(CpuContext *pCpuCtxt, MemoryContext* pMemCtxt, VariableContext* pVarCtxt, Address& rAddress) const;
 
   Expression* GetAddressExpression(void) const { return m_pExprOffset; }
@@ -348,14 +333,30 @@ public:
   virtual Expression* Visit(ExpressionVisitor* pVisitor) const { return pVisitor->VisitVariable(m_Type, m_Name); }
   virtual bool SignExtend(u32 NewSizeInBit) { return false; }
 
-  virtual bool Read(CpuContext *pCpuCtxt, MemoryContext* pMemCtxt, VariableContext* pVarCtxt, u64& rValue) const;
-  virtual bool Write(CpuContext *pCpuCtxt, MemoryContext* pMemCtxt, VariableContext* pVarCtxt, u64 Value);
+  virtual bool Read(CpuContext *pCpuCtxt, MemoryContext* pMemCtxt, VariableContext* pVarCtxt, u64& rValue, bool SignExtend = false) const;
+  virtual bool Write(CpuContext *pCpuCtxt, MemoryContext* pMemCtxt, VariableContext* pVarCtxt, u64 Value, bool SignExtend = false);
   virtual bool GetAddress(CpuContext *pCpuCtxt, MemoryContext* pMemCtxt, VariableContext* pVarCtxt, Address& rAddress) const;
 
 private:
   std::string m_Name;
   u32 m_Type;
 };
+
+namespace Expr
+{
+  Expression* MakeConst(u32 ConstType, u64 Value);
+  Expression* MakeId(u32 Id, CpuInformation const* pCpuInfo);
+  Expression* MakeMem(u32 AccessSize, Expression *pExprBase, Expression *pExprOffset, bool Dereference = true);
+
+  Expression* MakeCond(ConditionExpression::Type CondType, Expression *pRefExpr, Expression *pTestExpr);
+  Expression* MakeIfCond(ConditionExpression::Type CondType, Expression *pRefExpr, Expression *pTestExpr, Expression *pThenExpr);
+  Expression* MakeIfElseCond(ConditionExpression::Type CondType, Expression *pRefExpr, Expression *pTestExpr, Expression *pThenExpr, Expression *pElseExpr);
+  Expression* MakeWhileCond(ConditionExpression::Type CondType, Expression *pRefExpr, Expression *pTestExpr, Expression *pBodyExpr);
+
+  Expression* MakeOp(OperationExpression::Type OpType, Expression *pLeftExpr, Expression *pRightExpr);
+
+  Expression* MakeBind(Expression::List const& rExprs);
+}
 
 
 MEDUSA_NAMESPACE_END
