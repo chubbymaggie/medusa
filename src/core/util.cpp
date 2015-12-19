@@ -12,6 +12,10 @@
 // sha1
 #include <boost/uuid/name_generator.hpp>
 
+// random
+#include <boost/uuid/random_generator.hpp>
+#include <boost/random.hpp>
+
 MEDUSA_NAMESPACE_BEGIN
 
 // ref: http://stackoverflow.com/questions/7053538/how-do-i-encode-a-string-to-base64-using-only-boost
@@ -108,6 +112,50 @@ Id Sha1(std::string const &rName)
   }
 
   return Sha1Id;
+}
+
+Id RandomId(void)
+{
+  boost::uuids::basic_random_generator<boost::mt19937> Gen;
+  return Gen();
+}
+
+void HexDump(std::ostringstream& rOut, void const* pData, u16 DataLen, Address const& rAddr)
+{
+  u16 const LineLen = 0x10;
+  auto pRaw = reinterpret_cast<u8 const*>(pData);
+
+  Address CurAddr = rAddr;
+
+  for (u16 i = 0; i < DataLen; i += LineLen)
+  {
+    rOut << CurAddr.ToString() << ": ";
+
+    // Print hex values
+    for (u16 j = 0; j < LineLen; ++j)
+    {
+      if (i + j < DataLen)
+        rOut << " " << std::setw(2) << std::setfill('0') << static_cast<unsigned>(pRaw[i + j]);
+      else
+        rOut << "   ";
+    }
+
+    rOut << "  ";
+
+    // Print char if printable
+    for (u16 j = 0; j < LineLen; ++j)
+    {
+      if (i + j < DataLen)
+        rOut << (std::isprint(pRaw[i + j]) ? static_cast<char>(pRaw[i + j]) : '.');
+      else
+        rOut << " ";
+    }
+
+    // TODO: it could be wrong (bank, etc)
+    CurAddr += LineLen;
+
+    rOut << "\n";
+  }
 }
 
 MEDUSA_NAMESPACE_END

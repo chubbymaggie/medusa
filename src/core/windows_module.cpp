@@ -1,9 +1,5 @@
 #include <Windows.h>
 
-/* Silly windows.h ... */
-#undef max
-#undef min
-
 #include <boost/filesystem.hpp>
 
 #include "medusa/namespace.hpp"
@@ -20,7 +16,7 @@ void* Module::ImplLoadLibrary(boost::filesystem::path const& ModulePath)
 {
   boost::filesystem::path Path = ModulePath;
 
-  std::wstring ModuleName = Path.stem().wstring();
+  auto ModuleName = Path.stem().string();
   void* pModule = m_ModuleMap[ModuleName];
 
   if (pModule == nullptr)
@@ -32,9 +28,16 @@ void* Module::ImplLoadLibrary(boost::filesystem::path const& ModulePath)
   return pModule;
 }
 
+#ifdef __MINGW32__
+FARPROC WINAPI Module::ImplGetFunctionAddress(void* pModule, std::string const& FunctionName)
+{
+  return GetProcAddress(static_cast<HMODULE>(pModule), FunctionName.c_str());
+}
+#else
 void* Module::ImplGetFunctionAddress(void* pModule, std::string const& FunctionName)
 {
   return GetProcAddress(static_cast<HMODULE>(pModule), FunctionName.c_str());
 }
+#endif
 
 MEDUSA_NAMESPACE_END

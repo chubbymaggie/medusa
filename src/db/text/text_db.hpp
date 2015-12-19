@@ -1,5 +1,5 @@
-#ifndef __TEXT_DB_HPP__
-#define __TEXT_DB_HPP__
+#ifndef DB_TEXT_HPP
+#define DB_TEXT_HPP
 
 #include <medusa/namespace.hpp>
 #include <medusa/database.hpp>
@@ -93,7 +93,7 @@ public:
   virtual bool GetCrossReferenceFrom(Address const& rTo, Address::List& rFromList) const;
 
   virtual bool HasCrossReferenceTo(Address const& rFrom) const;
-  virtual bool GetCrossReferenceTo(Address const& rFrom, Address& rTo) const;
+  virtual bool GetCrossReferenceTo(Address const& rFrom, Address::List& rToList) const;
 
   // MultiCell
   virtual bool AddMultiCell(Address const& rAddress, MultiCell const& rMultiCell);
@@ -163,4 +163,4 @@ private:
 
 extern "C" DB_TEXT_EXPORT Database* GetDatabase(void);
 
-#endif // __TEXT_DB_HPP__
+#endif // !DB_TEXT_HPP

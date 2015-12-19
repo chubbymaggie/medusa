@@ -30,6 +30,7 @@ bool LineData::GetOperandNo(u16 Offset, u8& rOperandNo) const
 PrintData::PrintData(void)
   : m_Width(), m_LineWidth(), m_Height()
   , m_PrependAddress(true)
+  , m_Indent(2)
   , m_CurrentCommentOffset()
 {
 }
@@ -41,20 +42,31 @@ PrintData& PrintData::operator()(Address const& rAddress)
   return *this;
 }
 
-PrintData& PrintData::AppendImmediate(u64 Immediate, u32 Bits, u8 Base)
+PrintData& PrintData::AppendImmediate(ap_int const& rImmediate, u32 Bits, u8 Base)
 {
   std::ostringstream Buf;
 
   switch (Base)
   {
-    // TODO: binary
-  case  8: Buf << std::oct << "0o"; break;
-  case 10: Buf << std::dec << "0d"; break;
+  case  2:
+    {
+      Buf << "0b";
+      while (Bits--)
+        Buf << ((rImmediate & (1 << Bits)) ? "1" : "0");
+      return AppendImmediate(Buf.str());
+    }
+  case  8: Buf << std::oct << "0";  break;
+  case 10: Buf << std::dec;         break;
   default: Buf << std::hex << "0x"; break;
   }
 
-  Buf << std::setfill('0') << std::setw(Bits / 4) << Immediate;
+  Buf << std::setfill('0') << std::setw(Bits / 4) << rImmediate;
   return AppendImmediate(Buf.str());
+}
+
+PrintData& PrintData::AppendImmediate(BitVector const& rVal, u8 Base)
+{
+  return AppendImmediate(rVal.ToString(Base));
 }
 
 PrintData& PrintData::AppendAddress(Address const& rAddress)
@@ -75,7 +87,7 @@ PrintData& PrintData::AppendSpace(u16 SpaceNo)
 PrintData& PrintData::AppendNewLine(void)
 {
   if (m_PrependAddress && m_CurrentText.empty())
-    AppendAddress(m_CurrentAddress).AppendSpace(8);
+    AppendAddress(m_CurrentAddress).AppendSpace(m_Indent);
 
   std::lock_guard<MutexType> Lock(m_Mutex);
   ++m_Height;
@@ -267,7 +279,7 @@ void PrintData::ForEachLine(LineCallback Callback) const
 void PrintData::_AppendText(std::string const& rText, Mark::Type MarkType)
 {
   if (m_PrependAddress && m_CurrentText.empty())
-    AppendAddress(m_CurrentAddress).AppendSpace(8);
+    AppendAddress(m_CurrentAddress).AppendSpace(m_Indent);
 
   u16 TextLen = static_cast<u16>(rText.length());
   {

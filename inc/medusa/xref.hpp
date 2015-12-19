@@ -1,5 +1,5 @@
-#ifndef _MEDUSA_XREF_
-#define _MEDUSA_XREF_
+#ifndef MEDUSA_XREF_HPP
+#define MEDUSA_XREF_HPP
 
 #include "medusa/namespace.hpp"
 #include "medusa/export.hpp"
@@ -8,11 +8,7 @@
 
 #include <list>
 #include <boost/bimap.hpp>
-#include <boost/bimap/multiset_of.hpp>
-
-#ifdef _MSC_VER
-# pragma warning(disable: 4251)
-#endif
+#include <boost/bimap/unordered_multiset_of.hpp>
 
 MEDUSA_NAMESPACE_BEGIN
 
@@ -23,9 +19,11 @@ public:
    XRefs(void) {}
   ~XRefs(void) {}
 
+  typedef boost::bimaps::unordered_multiset_of<Address, std::hash<Address>> UnorderedMultiSetOfAddressType;
+
   typedef boost::bimap<
-    boost::bimaps::multiset_of<Address>,
-    Address
+    UnorderedMultiSetOfAddressType,
+    UnorderedMultiSetOfAddressType
   > TXRefs;
 
   //! Add new cross-reference
@@ -38,7 +36,7 @@ public:
   bool From(Address const& rTo, Address::List& rFromList) const;
 
   //! Get accessed address from a specific address
-  bool To(Address const& rFrom, Address& rTo) const;
+  bool To(Address const& rFrom, Address::List& rToList) const;
 
   //! Test if a specific address has a cross-reference
   bool HasXRefTo(Address const& rFrom) const;
@@ -58,4 +56,4 @@ private:
 
 MEDUSA_NAMESPACE_END
 
-#endif // !_MEDUSA_XREF_
+#endif // !MEDUSA_XREF_HPP

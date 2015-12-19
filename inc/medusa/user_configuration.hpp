@@ -1,7 +1,8 @@
-#ifndef __MEDUSA_USER_CONFIGURATION_HPP__
-#define __MEDUSA_USER_CONFIGURATION_HPP__
+#ifndef MEDUSA_USER_CONFIGURATION_HPP
+#define MEDUSA_USER_CONFIGURATION_HPP
 
 #include <mutex>
+#include <unordered_map>
 
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/ini_parser.hpp>
@@ -19,11 +20,14 @@ public:
   UserConfiguration(void);
   ~UserConfiguration(void);
 
-  bool GetOption(std::string const& rKey, std::string& rValue) const;
-  std::string GetOption(std::string const& rKey) const;
+  bool GetOption(std::string const& rKey, std::string& rValue);
+  std::string GetOption(std::string const& rKey);
   bool SetOption(std::string const& rKey, std::string const& rValue);
 
 private:
+  std::unordered_map<std::string, std::string> const& _GetDefaultOptions(void) const;
+
+  bool _WriteDefaultOption(std::string const& rKey);
   bool _WriteDefaultOptions(void);
 
   typedef std::mutex MutexType;
@@ -34,4 +38,4 @@ private:
 
 MEDUSA_NAMESPACE_END
 
-#endif // !__MEDUSA_USER_CONFIGURATION_HPP__
+#endif // !MEDUSA_USER_CONFIGURATION_HPP

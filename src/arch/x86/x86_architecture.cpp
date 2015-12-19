@@ -1,4 +1,5 @@
 #include "x86_architecture.hpp"
+#include "x86_calling_convention.hpp"
 
 X86Architecture::X86Architecture(void)
   : Architecture(MEDUSA_ARCH_TAG('x','8','6'))
@@ -72,16 +73,17 @@ char const* X86Architecture::X86CpuInformation::ConvertIdentifierToName(u32 Id) 
   }
 
   static const char *RegisterName[] =
-  {"", "al", "cl", "dl", "bl", "ah", "ch", "dh", "bh", "spl", "bpl", "sil", "dil", "r8b", "r9b", "r10b", "r11b", "r12b",
-   "r13b", "r14b", "r15b", "ax", "cx", "dx", "bx", "sp", "bp", "si", "di", "r8w", "r9w", "r10w", "r11w", "r12w", "r13w",
-   "r14w", "r15w", "ip" , "flags","es", "cs", "ss", "ds", "fs", "gs", "seg6", "seg7", "eax", "ecx", "edx", "ebx", "esp", "ebp",
-   "esi", "edi", "r8d", "r9d", "r10d", "r11d", "r12d", "r13d", "r14d", "r15d", "eip", "eflags", "cr0", "cr1", "cr2", "cr3", "cr4",
-   "cr5", "cr6", "cr7", "cr8", "cr9", "cr10", "cr11", "cr12", "cr13", "cr14", "cr15", "dr0", "dr1", "dr2", "dr3", "dr4",
-   "dr5", "dr6", "dr7", "dr8", "dr9", "dr10", "dr11", "dr12", "dr13", "dr14", "dr15", "tr0", "tr1", "tr2", "tr3", "tr4",
-   "tr5", "tr6", "tr7", "rax", "rcx", "rdx", "rbx", "rsp", "rbp", "rsi", "rdi", "r8", "r9", "r10", "r11", "r12", "r13",
-   "r14", "r15", "rip", "rflags", "st0", "st1", "st2", "st3", "st4", "st5", "st6", "st7", "mm0", "mm1", "mm2", "mm3", "mm4", "mm5",
-   "mm6", "mm7", "xmm0", "xmm1", "xmm2", "xmm3", "xmm4", "xmm5", "xmm6", "xmm7", "xmm8", "xmm9", "xmm10", "xmm11", "xmm12",
-   "xmm13", "xmm14", "xmm15" };
+  {"", "al", "cl", "dl", "bl", "ah", "ch", "dh", "bh", "spl", "bpl", "sil", "dil", "r8b", "r9b", "r10b", "r11b", "r12b", "r13b", "r14b", "r15b",
+  "ax", "cx", "dx", "bx", "sp", "bp", "si", "di", "r8w", "r9w", "r10w", "r11w", "r12w", "r13w", "r14w", "r15w", "ip" ,
+  "es", "cs", "ss", "ds", "fs", "gs", "seg6", "seg7",
+  "eax", "ecx", "edx", "ebx", "esp", "ebp", "esi", "edi", "r8d", "r9d", "r10d", "r11d", "r12d", "r13d", "r14d", "r15d", "eip",
+  "cr0", "cr1", "cr2", "cr3", "cr4", "cr5", "cr6", "cr7", "cr8", "cr9", "cr10", "cr11", "cr12", "cr13", "cr14", "cr15",
+  "dr0", "dr1", "dr2", "dr3", "dr4", "dr5", "dr6", "dr7", "dr8", "dr9", "dr10", "dr11", "dr12", "dr13", "dr14", "dr15",
+  "tr0", "tr1", "tr2", "tr3", "tr4", "tr5", "tr6", "tr7",
+  "rax", "rcx", "rdx", "rbx", "rsp", "rbp", "rsi", "rdi", "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15", "rip",
+  "st0", "st1", "st2", "st3", "st4", "st5", "st6", "st7",
+  "mm0", "mm1", "mm2", "mm3", "mm4", "mm5", "mm6", "mm7",
+  "xmm0", "xmm1", "xmm2", "xmm3", "xmm4", "xmm5", "xmm6", "xmm7", "xmm8", "xmm9", "xmm10", "xmm11", "xmm12", "xmm13", "xmm14", "xmm15" };
   if (Id < (sizeof(RegisterName) / sizeof(*RegisterName)))
     return RegisterName[Id];
 
@@ -93,6 +95,9 @@ u32 X86Architecture::X86CpuInformation::ConvertNameToIdentifier(std::string cons
   static std::unordered_map<std::string, u32> s_NameToId;
   if (s_NameToId.empty())
     {
+    s_NameToId["cf"] = X86_FlCf; s_NameToId["pf"] = X86_FlPf; s_NameToId["af"] = X86_FlAf; s_NameToId["zf"] = X86_FlZf;
+    s_NameToId["sf"] = X86_FlSf; s_NameToId["tf"] = X86_FlTf; s_NameToId["if"] = X86_FlIf; s_NameToId["df"] = X86_FlDf;
+    s_NameToId["of"] = X86_FlOf;
     s_NameToId["al"] = X86_Reg_Al; s_NameToId["cl"] = X86_Reg_Cl; s_NameToId["dl"] = X86_Reg_Dl; s_NameToId["bl"] = X86_Reg_Bl;
     s_NameToId["ah"] = X86_Reg_Ah; s_NameToId["ch"] = X86_Reg_Ch; s_NameToId["dh"] = X86_Reg_Dh; s_NameToId["bh"] = X86_Reg_Bh;
     s_NameToId["spl"] = X86_Reg_Spl; s_NameToId["bpl"] = X86_Reg_Bpl; s_NameToId["sil"] = X86_Reg_Sil; s_NameToId["dil"] = X86_Reg_Dil;
@@ -102,13 +107,13 @@ u32 X86Architecture::X86CpuInformation::ConvertNameToIdentifier(std::string cons
     s_NameToId["sp"] = X86_Reg_Sp; s_NameToId["bp"] = X86_Reg_Bp; s_NameToId["si"] = X86_Reg_Si; s_NameToId["di"] = X86_Reg_Di;
     s_NameToId["r8w"] = X86_Reg_R8w; s_NameToId["r9w"] = X86_Reg_R9w; s_NameToId["r10w"] = X86_Reg_R10w; s_NameToId["r11w"] = X86_Reg_R11w;
     s_NameToId["r12w"] = X86_Reg_R12w; s_NameToId["r13w"] = X86_Reg_R13w; s_NameToId["r14w"] = X86_Reg_R14w; s_NameToId["r15w"] = X86_Reg_R15w;
-    s_NameToId["ip"] = X86_Reg_Ip; s_NameToId["flags"] = X86_Reg_Flags; s_NameToId["es"] = X86_Reg_Es; s_NameToId["cs"] = X86_Reg_Cs;
-    s_NameToId["ss"] = X86_Reg_Ss; s_NameToId["ds"] = X86_Reg_Ds; s_NameToId["fs"] = X86_Reg_Fs; s_NameToId["gs"] = X86_Reg_Gs;
+    s_NameToId["ip"] = X86_Reg_Ip; s_NameToId["es"] = X86_Reg_Es; s_NameToId["cs"] = X86_Reg_Cs; s_NameToId["ss"] = X86_Reg_Ss; s_NameToId["ds"] = X86_Reg_Ds;
+    s_NameToId["fs"] = X86_Reg_Fs; s_NameToId["gs"] = X86_Reg_Gs;
     s_NameToId["seg6"] = X86_Reg_Seg6; s_NameToId["seg7"] = X86_Reg_Seg7; s_NameToId["eax"] = X86_Reg_Eax; s_NameToId["ecx"] = X86_Reg_Ecx;
     s_NameToId["edx"] = X86_Reg_Edx; s_NameToId["ebx"] = X86_Reg_Ebx; s_NameToId["esp"] = X86_Reg_Esp; s_NameToId["ebp"] = X86_Reg_Ebp;
     s_NameToId["esi"] = X86_Reg_Esi; s_NameToId["edi"] = X86_Reg_Edi; s_NameToId["r8d"] = X86_Reg_R8d; s_NameToId["r9d"] = X86_Reg_R9d;
     s_NameToId["r10d"] = X86_Reg_R10d; s_NameToId["r11d"] = X86_Reg_R11d; s_NameToId["r12d"] = X86_Reg_R12d; s_NameToId["r13d"] = X86_Reg_R13d;
-    s_NameToId["r14d"] = X86_Reg_R14d; s_NameToId["r15d"] = X86_Reg_R15d; s_NameToId["eip"] = X86_Reg_Eip; s_NameToId["eflags"] = X86_Reg_Eflags;
+    s_NameToId["r14d"] = X86_Reg_R14d; s_NameToId["r15d"] = X86_Reg_R15d; s_NameToId["eip"] = X86_Reg_Eip;
     s_NameToId["cr0"] = X86_Reg_Cr0; s_NameToId["cr1"] = X86_Reg_Cr1; s_NameToId["cr2"] = X86_Reg_Cr2; s_NameToId["cr3"] = X86_Reg_Cr3;
     s_NameToId["cr4"] = X86_Reg_Cr4; s_NameToId["cr5"] = X86_Reg_Cr5; s_NameToId["cr6"] = X86_Reg_Cr6; s_NameToId["cr7"] = X86_Reg_Cr7;
     s_NameToId["cr8"] = X86_Reg_Cr8; s_NameToId["cr9"] = X86_Reg_Cr9; s_NameToId["cr10"] = X86_Reg_Cr10; s_NameToId["cr11"] = X86_Reg_Cr11;
@@ -123,15 +128,15 @@ u32 X86Architecture::X86CpuInformation::ConvertNameToIdentifier(std::string cons
     s_NameToId["rsp"] = X86_Reg_Rsp; s_NameToId["rbp"] = X86_Reg_Rbp; s_NameToId["rsi"] = X86_Reg_Rsi; s_NameToId["rdi"] = X86_Reg_Rdi;
     s_NameToId["r8"] = X86_Reg_R8; s_NameToId["r9"] = X86_Reg_R9; s_NameToId["r10"] = X86_Reg_R10; s_NameToId["r11"] = X86_Reg_R11;
     s_NameToId["r12"] = X86_Reg_R12; s_NameToId["r13"] = X86_Reg_R13; s_NameToId["r14"] = X86_Reg_R14; s_NameToId["r15"] = X86_Reg_R15;
-    s_NameToId["rip"] = X86_Reg_Rip; s_NameToId["rflags"] = X86_Reg_Rflags; s_NameToId["st0"] = X86_Reg_St0; s_NameToId["st1"] = X86_Reg_St1;
-    s_NameToId["st2"] = X86_Reg_St2; s_NameToId["st3"] = X86_Reg_St3; s_NameToId["st4"] = X86_Reg_St4; s_NameToId["st5"] = X86_Reg_St5;
-    s_NameToId["st6"] = X86_Reg_St6; s_NameToId["st7"] = X86_Reg_St7; s_NameToId["mm0"] = X86_Reg_Mm0; s_NameToId["mm1"] = X86_Reg_Mm1;
-    s_NameToId["mm2"] = X86_Reg_Mm2; s_NameToId["mm3"] = X86_Reg_Mm3; s_NameToId["mm4"] = X86_Reg_Mm4; s_NameToId["mm5"] = X86_Reg_Mm5;
-    s_NameToId["mm6"] = X86_Reg_Mm6; s_NameToId["mm7"] = X86_Reg_Mm7; s_NameToId["xmm0"] = X86_Reg_Xmm0; s_NameToId["xmm1"] = X86_Reg_Xmm1;
-    s_NameToId["xmm2"] = X86_Reg_Xmm2; s_NameToId["xmm3"] = X86_Reg_Xmm3; s_NameToId["xmm4"] = X86_Reg_Xmm4; s_NameToId["xmm5"] = X86_Reg_Xmm5;
-    s_NameToId["xmm6"] = X86_Reg_Xmm6; s_NameToId["xmm7"] = X86_Reg_Xmm7; s_NameToId["xmm8"] = X86_Reg_Xmm8; s_NameToId["xmm9"] = X86_Reg_Xmm9;
-    s_NameToId["xmm10"] = X86_Reg_Xmm10; s_NameToId["xmm11"] = X86_Reg_Xmm11; s_NameToId["xmm12"] = X86_Reg_Xmm12; s_NameToId["xmm13"] = X86_Reg_Xmm13;
-    s_NameToId["xmm14"] = X86_Reg_Xmm14; s_NameToId["xmm15"] = X86_Reg_Xmm15;
+    s_NameToId["rip"] = X86_Reg_Rip; s_NameToId["st0"] = X86_Reg_St0; s_NameToId["st1"] = X86_Reg_St1; s_NameToId["st2"] = X86_Reg_St2;
+    s_NameToId["st3"] = X86_Reg_St3; s_NameToId["st4"] = X86_Reg_St4; s_NameToId["st5"] = X86_Reg_St5; s_NameToId["st6"] = X86_Reg_St6;
+    s_NameToId["st7"] = X86_Reg_St7; s_NameToId["mm0"] = X86_Reg_Mm0; s_NameToId["mm1"] = X86_Reg_Mm1; s_NameToId["mm2"] = X86_Reg_Mm2;
+    s_NameToId["mm3"] = X86_Reg_Mm3; s_NameToId["mm4"] = X86_Reg_Mm4; s_NameToId["mm5"] = X86_Reg_Mm5; s_NameToId["mm6"] = X86_Reg_Mm6;
+    s_NameToId["mm7"] = X86_Reg_Mm7; s_NameToId["xmm0"] = X86_Reg_Xmm0; s_NameToId["xmm1"] = X86_Reg_Xmm1; s_NameToId["xmm2"] = X86_Reg_Xmm2;
+    s_NameToId["xmm3"] = X86_Reg_Xmm3; s_NameToId["xmm4"] = X86_Reg_Xmm4; s_NameToId["xmm5"] = X86_Reg_Xmm5; s_NameToId["xmm6"] = X86_Reg_Xmm6;
+    s_NameToId["xmm7"] = X86_Reg_Xmm7; s_NameToId["xmm8"] = X86_Reg_Xmm8; s_NameToId["xmm9"] = X86_Reg_Xmm9; s_NameToId["xmm10"] = X86_Reg_Xmm10;
+    s_NameToId["xmm11"] = X86_Reg_Xmm11; s_NameToId["xmm12"] = X86_Reg_Xmm12; s_NameToId["xmm13"] = X86_Reg_Xmm13; s_NameToId["xmm14"] = X86_Reg_Xmm14;
+    s_NameToId["xmm15"] = X86_Reg_Xmm15;
     }
 
   auto itId = s_NameToId.find(rName);
@@ -143,9 +148,20 @@ u32 X86Architecture::X86CpuInformation::ConvertNameToIdentifier(std::string cons
 
 u32 X86Architecture::X86CpuInformation::GetRegisterByType(CpuInformation::Type RegType, u8 Mode) const
 {
-  static const u32 Register16[] = { X86_Reg_Sp,  X86_Reg_Bp,  X86_Reg_Ip,  X86_Reg_Flags,  X86_Reg_Ax,  X86_Reg_Cx  };
-  static const u32 Register32[] = { X86_Reg_Esp, X86_Reg_Ebp, X86_Reg_Eip, X86_Reg_Eflags, X86_Reg_Eax, X86_Reg_Ecx };
-  static const u32 Register64[] = { X86_Reg_Rsp, X86_Reg_Rbp, X86_Reg_Rip, X86_Reg_Rflags, X86_Reg_Rax, X86_Reg_Rcx };
+  /*
+    StackPointerRegister,
+    StackFrameRegister,
+    ProgramBaseRegister,
+    ProgramPointerRegister,
+    AccumulatorRegister,
+    CounterRegister,
+    DivisorRegister,
+    RemainderRegister,
+    InvalidRegister
+    */
+  static const u32 Register16[] = { X86_Reg_Sp,  X86_Reg_Bp,  X86_Reg_Cs, X86_Reg_Ip,  X86_Reg_Ax,  X86_Reg_Cx,  0, X86_Reg_Ah  };
+  static const u32 Register32[] = { X86_Reg_Esp, X86_Reg_Ebp, X86_Reg_Cs, X86_Reg_Eip, X86_Reg_Eax, X86_Reg_Ecx, 0, X86_Reg_Edx };
+  static const u32 Register64[] = { X86_Reg_Rsp, X86_Reg_Rbp, X86_Reg_Cs, X86_Reg_Rip, X86_Reg_Rax, X86_Reg_Rcx, 0, X86_Reg_Rdx };
 
   if (RegType < InvalidRegister)
     switch (Mode)
@@ -165,42 +181,50 @@ u32 X86Architecture::X86CpuInformation::GetSizeOfRegisterInBit(u32 Id) const
   default:
     return 0;
 
-  case X86_FlCf: case X86_FlPf: case X86_FlAf: case X86_FlZf: case X86_FlSf:
-  case X86_FlTf: case X86_FlIf: case X86_FlDf: case X86_FlOf:
+  case X86_FlCf:      case X86_FlPf:      case X86_FlAf:      case X86_FlZf:
+  case X86_FlSf:      case X86_FlTf:      case X86_FlIf:      case X86_FlDf:
+  case X86_FlOf:
     return 1;
 
-  case X86_Reg_Al:   case X86_Reg_Ah:   case X86_Reg_Bl:   case X86_Reg_Bh:
-  case X86_Reg_Cl:   case X86_Reg_Ch:   case X86_Reg_Dl:   case X86_Reg_Dh:
-  case X86_Reg_Spl:  case X86_Reg_Bpl:  case X86_Reg_Sil:  case X86_Reg_Dil:
-  case X86_Reg_R8b:  case X86_Reg_R9b:  case X86_Reg_R10b: case X86_Reg_R11b:
-  case X86_Reg_R12b: case X86_Reg_R13b: case X86_Reg_R14b: case X86_Reg_R15b:
+  case X86_Reg_Al:    case X86_Reg_Ah:    case X86_Reg_Bl:    case X86_Reg_Bh:
+  case X86_Reg_Cl:    case X86_Reg_Ch:    case X86_Reg_Dl:    case X86_Reg_Dh:
+  case X86_Reg_Spl:   case X86_Reg_Bpl:   case X86_Reg_Sil:   case X86_Reg_Dil:
+  case X86_Reg_R8b:   case X86_Reg_R9b:   case X86_Reg_R10b:  case X86_Reg_R11b:
+  case X86_Reg_R12b:  case X86_Reg_R13b:  case X86_Reg_R14b:  case X86_Reg_R15b:
     return 8;
 
-  case X86_Reg_Ax:   case X86_Reg_Bx:   case X86_Reg_Cx:   case X86_Reg_Dx:
-  case X86_Reg_Sp:   case X86_Reg_Bp:   case X86_Reg_Si:   case X86_Reg_Di:
-  case X86_Reg_R8w:  case X86_Reg_R9w:  case X86_Reg_R10w: case X86_Reg_R11w:
-  case X86_Reg_R12w: case X86_Reg_R13w: case X86_Reg_R14w: case X86_Reg_R15w:
+  case X86_Reg_Ax:    case X86_Reg_Bx:    case X86_Reg_Cx:    case X86_Reg_Dx:
+  case X86_Reg_Sp:    case X86_Reg_Bp:    case X86_Reg_Si:    case X86_Reg_Di:
+  case X86_Reg_R8w:   case X86_Reg_R9w:   case X86_Reg_R10w:  case X86_Reg_R11w:
+  case X86_Reg_R12w:  case X86_Reg_R13w:  case X86_Reg_R14w:  case X86_Reg_R15w:
   case X86_Reg_Ip:
-  case X86_Reg_Cs:   case X86_Reg_Ds:   case X86_Reg_Es:   case X86_Reg_Ss:
-  case X86_Reg_Fs:   case X86_Reg_Gs:
-  case X86_Reg_Flags:
+  case X86_Reg_Cs:    case X86_Reg_Ds:    case X86_Reg_Es:    case X86_Reg_Ss:
+  case X86_Reg_Fs:    case X86_Reg_Gs:
     return 16;
 
-  case X86_Reg_Eax:  case X86_Reg_Ebx:  case X86_Reg_Ecx:  case X86_Reg_Edx:
-  case X86_Reg_Esp:  case X86_Reg_Ebp:  case X86_Reg_Esi:  case X86_Reg_Edi:
-  case X86_Reg_R8d:  case X86_Reg_R9d:  case X86_Reg_R10d: case X86_Reg_R11d:
-  case X86_Reg_R12d: case X86_Reg_R13d: case X86_Reg_R14d: case X86_Reg_R15d:
+  case X86_Reg_Eax:   case X86_Reg_Ebx:   case X86_Reg_Ecx:   case X86_Reg_Edx:
+  case X86_Reg_Esp:   case X86_Reg_Ebp:   case X86_Reg_Esi:   case X86_Reg_Edi:
+  case X86_Reg_R8d:   case X86_Reg_R9d:   case X86_Reg_R10d:  case X86_Reg_R11d:
+  case X86_Reg_R12d:  case X86_Reg_R13d:  case X86_Reg_R14d:  case X86_Reg_R15d:
   case X86_Reg_Eip:
-  case X86_Reg_Eflags:
     return 32;
 
-  case X86_Reg_Rax:  case X86_Reg_Rbx:  case X86_Reg_Rcx:  case X86_Reg_Rdx:
-  case X86_Reg_Rsp:  case X86_Reg_Rbp:  case X86_Reg_Rsi:  case X86_Reg_Rdi:
-  case X86_Reg_R8:   case X86_Reg_R9:   case X86_Reg_R10:  case X86_Reg_R11:
-  case X86_Reg_R12:  case X86_Reg_R13:  case X86_Reg_R14:  case X86_Reg_R15:
+  case X86_Reg_Rax:   case X86_Reg_Rbx:   case X86_Reg_Rcx:   case X86_Reg_Rdx:
+  case X86_Reg_Rsp:   case X86_Reg_Rbp:   case X86_Reg_Rsi:   case X86_Reg_Rdi:
+  case X86_Reg_R8:    case X86_Reg_R9:    case X86_Reg_R10:   case X86_Reg_R11:
+  case X86_Reg_R12:   case X86_Reg_R13:   case X86_Reg_R14:   case X86_Reg_R15:
   case X86_Reg_Rip:
-  case X86_Reg_Rflags:
     return 64;
+
+  case X86_Reg_Mm0:   case X86_Reg_Mm1:   case X86_Reg_Mm2:   case X86_Reg_Mm3:
+  case X86_Reg_Mm4:   case X86_Reg_Mm5:   case X86_Reg_Mm6:   case X86_Reg_Mm7:
+    return 64;
+
+  case X86_Reg_Xmm0:  case X86_Reg_Xmm1:  case X86_Reg_Xmm2:  case X86_Reg_Xmm3:
+  case X86_Reg_Xmm4:  case X86_Reg_Xmm5:  case X86_Reg_Xmm6:  case X86_Reg_Xmm7:
+  case X86_Reg_Xmm8:  case X86_Reg_Xmm9:  case X86_Reg_Xmm10: case X86_Reg_Xmm11:
+  case X86_Reg_Xmm12: case X86_Reg_Xmm13: case X86_Reg_Xmm14: case X86_Reg_Xmm15:
+    return 128;
   }
 }
 
@@ -257,165 +281,167 @@ bool X86Architecture::X86CpuInformation::IsRegisterAliased(u32 Id0, u32 Id1) con
   return false;
 }
 
-Expression* X86Architecture::UpdateFlags(Instruction& rInsn, Expression* pResultExpr)
+bool X86Architecture::X86CpuInformation::NormalizeRegister(u32 Id, u8 Mode, u32& rExtId, u64& rMask) const
 {
-  u32 RegFlags = m_CpuInfo.GetRegisterByType(CpuInformation::FlagRegister, rInsn.GetMode());
-  u32 RegFlagsSize = m_CpuInfo.GetSizeOfRegisterInBit(RegFlags);
-  assert(RegFlags != 0 && "Invalid flags");
+  auto CurRegSize = GetSizeOfRegisterInBit(Id);
+  if (CurRegSize == 0)
+    return false;
 
-  u32 Bit = rInsn.Operand(0)->GetSizeInBit();
-  assert(Bit && "Invalid operand");
-
-  auto InsnLen = static_cast<u8>(rInsn.GetLength());
-
-  std::list<Expression *> FlagExprs;
-
-  switch (rInsn.GetOpcode())
+  // KS: Flag registers are already normalized since they can't be extended.
+  if (CurRegSize == 1)
+    return false;
+  // KS: We ignore segment registers
+  switch (Id)
   {
-  case X86_Opcode_Inc: case X86_Opcode_Add:
-    FlagExprs.push_back(new IfElseConditionExpression(IfElseConditionExpression::CondUlt,
-      pResultExpr->Clone(), rInsn.Operand(0)->GetSemantic(rInsn.GetMode(), &m_CpuInfo, InsnLen),
-      SetFlags(rInsn, X86_FlCf), ResetFlags(rInsn, X86_FlCf)));
-    break;
+  case X86_Reg_Cs: case X86_Reg_Ds: case X86_Reg_Es: case X86_Reg_Ss: case X86_Reg_Fs: case X86_Reg_Gs:
+    return false;
+  }
+  // KS: For now, we assume that SIMD registers can't be normalized (which is false).
+  if (CurRegSize > 64)
+    return false;
 
-  case X86_Opcode_Adc:
-    FlagExprs.push_back(new IfElseConditionExpression(IfElseConditionExpression::CondUlt,
-      pResultExpr->Clone(),
-      new OperationExpression(OperationExpression::OpAdd, rInsn.Operand(0)->GetSemantic(rInsn.GetMode(), &m_CpuInfo, InsnLen), ExtractFlag(rInsn, X86_FlCf)),
-      SetFlags(rInsn, X86_FlCf), ResetFlags(rInsn, X86_FlCf)));
-    break;
 
-  case X86_Opcode_Dec:
-    FlagExprs.push_back(new IfElseConditionExpression(IfElseConditionExpression::CondUlt,
-      rInsn.Operand(0)->GetSemantic(rInsn.GetMode(), &m_CpuInfo, InsnLen), new ConstantExpression(Bit, 1),
-      SetFlags(rInsn, X86_FlCf), ResetFlags(rInsn, X86_FlCf)));
-    break;
+  switch (Mode)
+  {
+    // KS: This case is tedious because X86_Bit_16 could actually allow 32-bit register using the op_size prefix.
+    // The question is: wouldn't be better to assume that this mode uses 32-bit by default?
+  case X86_Bit_16:
+  case X86_Bit_32:
+  {
+    if (CurRegSize > 32)
+      return false;
+    if (CurRegSize == 32)
+      return false;
 
-  case X86_Opcode_Sub: case X86_Opcode_Cmp:
-    FlagExprs.push_back(new IfElseConditionExpression(IfElseConditionExpression::CondUlt,
-      rInsn.Operand(0)->GetSemantic(rInsn.GetMode(), &m_CpuInfo, InsnLen), rInsn.Operand(1)->GetSemantic(rInsn.GetMode(), &m_CpuInfo, InsnLen),
-      SetFlags(rInsn, X86_FlCf), ResetFlags(rInsn, X86_FlCf)));
-    break;
-
-  case X86_Opcode_Sbb:
-    FlagExprs.push_back(new IfElseConditionExpression(IfElseConditionExpression::CondUlt,
-      pResultExpr->Clone(),
-      new OperationExpression(OperationExpression::OpSub, rInsn.Operand(0)->GetSemantic(rInsn.GetMode(), &m_CpuInfo, InsnLen), ExtractFlag(rInsn, X86_FlCf)),
-      SetFlags(rInsn, X86_FlCf), ResetFlags(rInsn, X86_FlCf)));
     break;
   }
 
-  auto UpdatedFlags = rInsn.GetUpdatedFlags();
-
-  if (UpdatedFlags & X86_FlZf)
+  case X86_Bit_64:
   {
-    FlagExprs.push_back(new IfElseConditionExpression(ConditionExpression::CondEq,
-      pResultExpr->Clone(),
-      new ConstantExpression(Bit, 0x0),
-      SetFlags(rInsn, X86_FlZf), ResetFlags(rInsn, X86_FlZf)));
+    if (CurRegSize == 64)
+      return false;
+
+    break;
   }
 
-  if (UpdatedFlags & X86_FlSf)
-  {
-    FlagExprs.push_back(new IfElseConditionExpression(ConditionExpression::CondEq,
-      new OperationExpression(OperationExpression::OpAnd, pResultExpr->Clone(), new ConstantExpression(Bit, 1 << (Bit - 1))),
-      new ConstantExpression(Bit, 1 << (Bit - 1)),
-      SetFlags(rInsn, X86_FlSf), ResetFlags(rInsn, X86_FlSf)));
+  default:
+    return false;
   }
 
-  if (FlagExprs.empty())
-    return pResultExpr;
+  switch (Id)
+  {
+  case X86_Reg_Al: case X86_Reg_Ah: case X86_Reg_Ax:   case X86_Reg_Eax:  rExtId = (Mode == X86_Bit_64) ? X86_Reg_Rax : X86_Reg_Eax;  break;
+  case X86_Reg_Bl: case X86_Reg_Bh: case X86_Reg_Bx:   case X86_Reg_Ebx:  rExtId = (Mode == X86_Bit_64) ? X86_Reg_Rbx : X86_Reg_Ebx;  break;
+  case X86_Reg_Cl: case X86_Reg_Ch: case X86_Reg_Cx:   case X86_Reg_Ecx:  rExtId = (Mode == X86_Bit_64) ? X86_Reg_Rcx : X86_Reg_Ecx;  break;
+  case X86_Reg_Dl: case X86_Reg_Dh: case X86_Reg_Dx:   case X86_Reg_Edx:  rExtId = (Mode == X86_Bit_64) ? X86_Reg_Rdx : X86_Reg_Edx;  break;
+  case X86_Reg_Sil:                 case X86_Reg_Si:   case X86_Reg_Esi:  rExtId = (Mode == X86_Bit_64) ? X86_Reg_Rsi : X86_Reg_Esi;  break;
+  case X86_Reg_Dil:                 case X86_Reg_Di:   case X86_Reg_Edi:  rExtId = (Mode == X86_Bit_64) ? X86_Reg_Rdi : X86_Reg_Edi;  break;
+  case X86_Reg_Spl:                 case X86_Reg_Sp:   case X86_Reg_Esp:  rExtId = (Mode == X86_Bit_64) ? X86_Reg_Rsp : X86_Reg_Esp;  break;
+  case X86_Reg_Bpl:                 case X86_Reg_Bp:   case X86_Reg_Ebp:  rExtId = (Mode == X86_Bit_64) ? X86_Reg_Rbp : X86_Reg_Ebp;  break;
+  case X86_Reg_R8b:                 case X86_Reg_R8w:  case X86_Reg_R8d:  rExtId = (Mode == X86_Bit_64) ? X86_Reg_R8  : X86_Reg_R8d;  break;
+  case X86_Reg_R9b:                 case X86_Reg_R9w:  case X86_Reg_R9d:  rExtId = (Mode == X86_Bit_64) ? X86_Reg_R9  : X86_Reg_R9d;  break;
+  case X86_Reg_R10b:                case X86_Reg_R10w: case X86_Reg_R10d: rExtId = (Mode == X86_Bit_64) ? X86_Reg_R10 : X86_Reg_R10d; break;
+  case X86_Reg_R11b:                case X86_Reg_R11w: case X86_Reg_R11d: rExtId = (Mode == X86_Bit_64) ? X86_Reg_R11 : X86_Reg_R11d; break;
+  case X86_Reg_R12b:                case X86_Reg_R12w: case X86_Reg_R12d: rExtId = (Mode == X86_Bit_64) ? X86_Reg_R12 : X86_Reg_R12d; break;
+  case X86_Reg_R13b:                case X86_Reg_R13w: case X86_Reg_R13d: rExtId = (Mode == X86_Bit_64) ? X86_Reg_R13 : X86_Reg_R13d; break;
+  case X86_Reg_R14b:                case X86_Reg_R14w: case X86_Reg_R14d: rExtId = (Mode == X86_Bit_64) ? X86_Reg_R14 : X86_Reg_R14d; break;
+  case X86_Reg_R15b:                case X86_Reg_R15w: case X86_Reg_R15d: rExtId = (Mode == X86_Bit_64) ? X86_Reg_R15 : X86_Reg_R15d; break;
+  }
 
-  delete pResultExpr;
-  return new BindExpression(FlagExprs);
+  switch (Id)
+  {
+  case X86_Reg_Ah: case X86_Reg_Bh: case X86_Reg_Ch: case X86_Reg_Dh: rMask = 0x000000000000ff00ULL; break;
+  default: rMask = (1ULL << CurRegSize) - 1; break;
+  }
+
+  // In AMD64, if a reg32 is written, it clears the 32-bit MSB of the corresponding register.
+  if (Mode == X86_Bit_64 && CurRegSize == 32)
+    rMask = 0xffffffffffffffffULL;
+
+  return true;
 }
 
-OperationExpression* X86Architecture::SetFlags(Instruction& rInsn, u32 Flags)
+// src: https://en.wikipedia.org/wiki/X86_calling_conventions
+CallingConvention const* X86Architecture::GetCallingConvention(std::string const& rCallConvName, u8 Mode) const
 {
-  u32 RegFlags = m_CpuInfo.GetRegisterByType(CpuInformation::FlagRegister, rInsn.GetMode());
-  u32 RegFlagsSize = m_CpuInfo.GetSizeOfRegisterInBit(RegFlags);
-  assert(RegFlags != 0 && "Invalid flags");
+  if (rCallConvName == "cdecl")
+  {
 
-  u32 FlagsMask = ConvertFlagIdToMask(Flags);
-  return new OperationExpression(OperationExpression::OpAff,
-    /**/new IdentifierExpression(RegFlags, &m_CpuInfo),
-    /**/new OperationExpression(OperationExpression::OpOr,
-    /****/new IdentifierExpression(RegFlags, &m_CpuInfo),
-    /****/new ConstantExpression(RegFlagsSize, FlagsMask)));
+    static CdeclCallingConvention s_CdeclCallConv16(static_cast<u8>(X86_Bit_16), m_CpuInfo);
+    static CdeclCallingConvention s_CdeclCallConv32(static_cast<u8>(X86_Bit_32), m_CpuInfo);
+    switch (Mode)
+    {
+    case X86_Bit_16: return &s_CdeclCallConv16;
+    case X86_Bit_32: return &s_CdeclCallConv32;
+    default: return nullptr;
+    }
+  }
+
+  if (rCallConvName == "stdcall")
+  {
+
+    static StdCallCallingConvention s_StdCallCallConv16(static_cast<u8>(X86_Bit_16), m_CpuInfo);
+    static StdCallCallingConvention s_StdCallCallConv32(static_cast<u8>(X86_Bit_32), m_CpuInfo);
+    switch (Mode)
+    {
+    case X86_Bit_16: return &s_StdCallCallConv16;
+    case X86_Bit_32: return &s_StdCallCallConv32;
+    default: return nullptr;
+    }
+  }
+
+  if (rCallConvName == "ms_x64")
+  {
+    if (Mode != X86_Bit_64)
+      return nullptr;
+
+    static MsX64CallingConvention s_MsX64CallConv(m_CpuInfo);
+    return &s_MsX64CallConv;
+  }
+
+  if (rCallConvName == "system_v")
+  {
+    if (Mode != X86_Bit_64)
+      return nullptr;
+
+    static SystemVCallingConvention s_SystemVCallConv(m_CpuInfo);
+    return &s_SystemVCallConv;
+  }
+
+  return nullptr;
 }
 
-OperationExpression* X86Architecture::ResetFlags(Instruction& rInsn, u32 Flags)
+std::vector<std::string> X86Architecture::GetCallingConventionNames(void) const
 {
-  u32 RegFlags = m_CpuInfo.GetRegisterByType(CpuInformation::FlagRegister, rInsn.GetMode());
-  u32 RegFlagsSize = m_CpuInfo.GetSizeOfRegisterInBit(RegFlags);
-  assert(RegFlags != 0 && "Invalid flags");
-
-  u32 FlagsMask = ConvertFlagIdToMask(Flags);
-  return new OperationExpression(OperationExpression::OpAff,
-    /**/new IdentifierExpression(RegFlags, &m_CpuInfo),
-    /**/new OperationExpression(OperationExpression::OpAnd,
-    /****/new IdentifierExpression(RegFlags, &m_CpuInfo),
-    /****/new ConstantExpression(RegFlagsSize, ~FlagsMask)));
+  return{ "cdecl", "stdcall", "ms_x64", "system_v" };
 }
 
-ConditionExpression* X86Architecture::TestFlags(Instruction& rInsn, u32 Flags)
+bool X86Architecture::HandleExpression(Expression::LSPType & rExprs, std::string const& rName, Instruction& rInsn, Expression::SPType spResExpr)
 {
-  u32 RegFlags = m_CpuInfo.GetRegisterByType(CpuInformation::FlagRegister, rInsn.GetMode());
-  u32 RegFlagsSize = m_CpuInfo.GetSizeOfRegisterInBit(RegFlags);
-  assert(RegFlags != 0 && "Invalid flags");
-
-  u32 FlagsMask = ConvertFlagIdToMask(Flags);
-  return new ConditionExpression(ConditionExpression::CondEq,
-    /**/new OperationExpression(OperationExpression::OpAnd,
-    /****/new IdentifierExpression(RegFlags, &m_CpuInfo),
-    /****/new ConstantExpression(RegFlagsSize, FlagsMask)),
-    /**/new ConstantExpression(RegFlagsSize, FlagsMask));
+  return false;
 }
 
-ConditionExpression* X86Architecture::TestNotFlags(Instruction& rInsn, u32 Flags)
+// TODO: handle base address
+bool X86Architecture::EmitSetExecutionAddress(Expression::VSPType& rExprs, Address const& rAddr, u8 Mode)
 {
-  u32 RegFlags = m_CpuInfo.GetRegisterByType(CpuInformation::FlagRegister, rInsn.GetMode());
-  u32 RegFlagsSize = m_CpuInfo.GetSizeOfRegisterInBit(RegFlags);
-  assert(RegFlags != 0 && "Invalid flags");
-
-  u32 FlagsMask = ConvertFlagIdToMask(Flags);
-  return new ConditionExpression(ConditionExpression::CondEq,
-    /**/new OperationExpression(OperationExpression::OpAnd,
-    /****/new IdentifierExpression(RegFlags, &m_CpuInfo),
-    /****/new ConstantExpression(RegFlagsSize, FlagsMask)),
-    /**/new ConstantExpression(RegFlagsSize, 0x0));
-}
-
-OperationExpression* X86Architecture::ExtractFlag(Instruction& rInsn, u32 Flag)
-{
-  u32 RegFlags = m_CpuInfo.GetRegisterByType(CpuInformation::FlagRegister, rInsn.GetMode());
-  u32 RegFlagsSize = m_CpuInfo.GetSizeOfRegisterInBit(RegFlags);
-  assert(RegFlags != 0 && "Invalid flags");
-
-    u32 FlagPos = 0;
-#define CONVERT_FLAG_ID_TO_POS(fl) (Flag & X86_Fl##fl) FlagPos = X86_##fl##Bit
-    if      CONVERT_FLAG_ID_TO_POS(Cf);
-    else if CONVERT_FLAG_ID_TO_POS(Pf);
-    else if CONVERT_FLAG_ID_TO_POS(Af);
-    else if CONVERT_FLAG_ID_TO_POS(Zf);
-    else if CONVERT_FLAG_ID_TO_POS(Sf);
-    else if CONVERT_FLAG_ID_TO_POS(Tf);
-    else if CONVERT_FLAG_ID_TO_POS(If);
-    else if CONVERT_FLAG_ID_TO_POS(Df);
-    else if CONVERT_FLAG_ID_TO_POS(Of);
-#undef CONVERT_FLAG_ID_TO_MASK
-
-    return new OperationExpression(OperationExpression::OpAnd,
-      /**/new OperationExpression(OperationExpression::OpLrs,
-      /****/new IdentifierExpression(RegFlags, &m_CpuInfo),
-      /****/new ConstantExpression(RegFlagsSize, FlagPos)),
-      /**/new ConstantExpression(RegFlagsSize, 1));
+  u32 Id = m_CpuInfo.GetRegisterByType(CpuInformation::ProgramPointerRegister, Mode);
+  if (Id == 0)
+    return false;
+  u32 IdSz = m_CpuInfo.GetSizeOfRegisterInBit(Id);
+  if (IdSz == 0)
+    return false;
+  rExprs.push_back(Expr::MakeAssign(Expr::MakeId(Id, &m_CpuInfo), Expr::MakeBitVector(IdSz, rAddr.GetOffset())));
+  return true;
 }
 
 bool X86Architecture::Disassemble(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode)
 {
+  rInsn.GetData()->ArchitectureTag() = GetTag();
+  rInsn.Mode() = Mode;
+
   u8 Opcode;
-  rBinStrm.Read(Offset, Opcode);
+  if (!rBinStrm.Read(Offset, Opcode))
+    return false;
   bool Res = (this->*m_Table_1[Opcode])(rBinStrm, Offset + 1, rInsn, Mode);
   rInsn.SetName(m_Mnemonic[rInsn.GetOpcode()]);
   return Res;

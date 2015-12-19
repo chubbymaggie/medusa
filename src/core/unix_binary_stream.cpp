@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <cstdlib>
 #include "medusa/binary_stream.hpp"
+#include <boost/filesystem/operations.hpp>
 
 MEDUSA_NAMESPACE_BEGIN
 
@@ -22,18 +23,8 @@ BinaryStream::~BinaryStream(void)
 
 /* file binary stream */
 
-FileBinaryStream::FileBinaryStream(void)
-: BinaryStream()
-, m_FileName("")
-, m_FileHandle(-1)
-, m_MapHandle()
-{
-  m_pBuffer = MAP_FAILED;
-}
-
 FileBinaryStream::FileBinaryStream(boost::filesystem::path const& rFilePath)
 : BinaryStream()
-, m_FileName(rFilePath)
 , m_FileHandle(-1)
 , m_MapHandle()
 {
@@ -48,7 +39,7 @@ FileBinaryStream::~FileBinaryStream(void)
 
 void FileBinaryStream::Open(boost::filesystem::path const& rFilePath)
 {
-  m_FileName = rFilePath;
+  m_Path = rFilePath;
   m_FileHandle = open(rFilePath.string().c_str(), O_RDONLY);
 
   if (m_FileHandle == -1)
@@ -86,11 +77,6 @@ void FileBinaryStream::Close(void)
 
 /* memory binary stream */
 
-MemoryBinaryStream::MemoryBinaryStream(void)
-  : BinaryStream()
-{
-}
-
 MemoryBinaryStream::MemoryBinaryStream(void const* pMem, u32 MemSize)
   : BinaryStream()
 {
@@ -104,12 +90,14 @@ MemoryBinaryStream::~MemoryBinaryStream(void)
 
 void MemoryBinaryStream::Open(void const* pMem, u32 MemSize)
 {
+  m_Path = boost::filesystem::unique_path();
   m_pBuffer = ::malloc(MemSize);
   if (m_pBuffer == nullptr)
     throw Exception_System("open");
 
-  m_Size    = MemSize;
-  ::memcpy(m_pBuffer, pMem, MemSize);
+  m_Size = MemSize;
+  if (pMem != nullptr)
+    ::memcpy(m_pBuffer, pMem, MemSize);
 }
 
 void MemoryBinaryStream::Close(void)

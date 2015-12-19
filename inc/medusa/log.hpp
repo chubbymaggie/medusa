@@ -1,5 +1,5 @@
-#ifndef __MEDUSA_LOG__
-#define __MEDUSA_LOG__
+#ifndef MEDUSA_LOG_HPP
+#define MEDUSA_LOG_HPP
 
 #include "medusa/namespace.hpp"
 #include "medusa/export.hpp"
@@ -14,6 +14,7 @@
 #include <boost/thread/recursive_mutex.hpp>
 #include <boost/thread/locks.hpp>
 #include <boost/type_traits.hpp>
+#include <unordered_map>
 
 #ifdef _MSC_VER
 # pragma warning(disable: 4251 4275)
@@ -21,26 +22,29 @@
 
 MEDUSA_NAMESPACE_BEGIN
 
+enum LogLevelType
+{
+  LogUnknown,
+  LogWarning,
+  LogError,
+  LogInfo,
+  LogDefault,
+  LogDebug,
+};
+
 class Medusa_EXPORT LogWrapper
 {
 public:
   typedef boost::function<void(std::string const&)> LoggerCallback;
   typedef LogWrapper& (*LoggerFunction)(LogWrapper&);
 
-  LogWrapper(LoggerCallback pLog, std::string Name, std::string& rBuffer)
-    : m_pLog(pLog)
-    , m_Name(Name)
-    , m_rBuffer(rBuffer)
-  {
-    if (m_rBuffer.empty())
-    {
-      m_rBuffer  = Name;
-      m_rBuffer += ": ";
-    }
-  }
+  LogWrapper(LoggerCallback pLog, std::string const& rName, std::string& rBuffer);
 
   template<typename T> LogWrapper& operator<<(T Value)
   {
+    if (!_CheckLogLevel())
+      return *this;
+
     std::ostringstream oss;
 
     if (boost::is_arithmetic<T>::value)
@@ -54,32 +58,24 @@ public:
     return *this;
   }
 
-  LogWrapper& Flush(void)
-  {
-    if (m_pLog)
-    {
-      boost::recursive_mutex::scoped_lock(m_Mutex);
-      m_pLog(m_rBuffer);
-      m_rBuffer = m_Name;
-      m_rBuffer += ": ";
-    }
-    return *this;
-  }
+  LogWrapper& Flush(void);
+  LogWrapper& Level(LogLevelType NewLvl);
 
-  std::string& GetBuffer(void) { return m_rBuffer;  }
-  void Write(char const* pMsg) { m_rBuffer += pMsg; }
-  void Lock(void)              { m_Mutex.lock();    }
-  void Unlock(void)            { m_Mutex.unlock();  }
+  std::string& GetBuffer(void);
+  void Write(char const* pMsg);
+  void Lock(void);
+  void Unlock(void);
 
 private:
-  static std::string StringToWString(std::string const& rString);
-
   typedef boost::recursive_mutex MutexType;
+
+  bool _CheckLogLevel(void) const;
 
   LoggerCallback   m_pLog;
   std::string      m_Name;
   std::string&     m_rBuffer;
   static MutexType m_Mutex;
+  LogLevelType     m_Level;
 };
 
 template<> Medusa_EXPORT LogWrapper& LogWrapper::operator<<(s8 Value);
@@ -92,6 +88,7 @@ template<> Medusa_EXPORT LogWrapper& LogWrapper::operator<<(LogWrapper::LoggerFu
 
 Medusa_EXPORT LogWrapper& LogFlush(LogWrapper& rLogWrapper);
 Medusa_EXPORT LogWrapper& LogEnd(LogWrapper& rLogWrapper);
+Medusa_EXPORT LogWrapper& LogLevel(LogWrapper& rLogWrapper, LogLevelType NewLvl);
 
 //! this class allows core or modules to log information
 class Medusa_EXPORT Log : boost::noncopyable
@@ -101,6 +98,8 @@ public:
   { m_pLog = pLog; }
 
   static LogWrapper Write(std::string const& rType);
+  static void Flush(void);
+  static bool ChangeLogLevel(LogLevelType NewLvl);
 
 private:
   Log(void);
@@ -114,4 +113,4 @@ private:
 
 MEDUSA_NAMESPACE_END
 
-#endif // !__MEDUSA_LOG__
+#endif // !MEDUSA_LOG_HPP

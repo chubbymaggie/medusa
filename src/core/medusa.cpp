@@ -3,11 +3,13 @@
 #include "medusa/module.hpp"
 #include "medusa/xref.hpp"
 #include "medusa/log.hpp"
+#include "medusa/user_configuration.hpp"
 
 #include <cstring>
 #include <cstdlib>
 #include <list>
 #include <algorithm>
+#include <boost/filesystem/operations.hpp>
 
 MEDUSA_NAMESPACE_BEGIN
 
@@ -43,9 +45,9 @@ std::string Medusa::GetVersion(void)
     % pBuildTime).str());
 }
 
-void Medusa::AddTask(Task* pTask)
+bool Medusa::AddTask(Task* pTask)
 {
-  m_TaskManager.AddTask(pTask);
+  return m_TaskManager.AddTask(pTask);
 }
 
 void Medusa::WaitForTasks(void)
@@ -54,11 +56,12 @@ void Medusa::WaitForTasks(void)
 }
 
 bool Medusa::Start(
-  BinaryStream::SharedPtr spBinaryStream,
-  Database::SharedPtr spDatabase,
-  Loader::SharedPtr spLoader,
-  Architecture::VectorSharedPtr spArchitectures,
-  OperatingSystem::SharedPtr spOperatingSystem)
+  BinaryStream::SPType spBinaryStream,
+  Database::SPType spDatabase,
+  Loader::SPType spLoader,
+  Architecture::VSPType spArchitectures,
+  OperatingSystem::SPType spOperatingSystem,
+  bool StartAnalyzer)
 {
   if (spArchitectures.empty())
     return false;
@@ -89,11 +92,17 @@ bool Medusa::Start(
     spOperatingSystem->ProvideDetails(m_Document);
   }
 
+  if (!StartAnalyzer)
+    return true;
+
   /* Disassemble the file with the default analyzer */
-  AddTask(m_Analyzer.CreateDisassembleAllFunctionsTask(m_Document));
+  AddTask(m_Analyzer.CreateTask("disassemble all functions", m_Document));
+
+  /* Analyze the stack for each functions */
+  //AddTask(m_Analyzer.CreateAnalyzeStackAllFunctionsTask(m_Document));
 
   /* Find all strings using the previous analyze */
-  AddTask(m_Analyzer.CreateFindAllStringTask(m_Document));
+  AddTask(m_Analyzer.CreateTask("find all strings", m_Document));
 
   /* Analyze all functions */
   if (spOperatingSystem)
@@ -110,8 +119,37 @@ bool Medusa::Start(
   return true;
 }
 
+bool Medusa::IgnoreDatabasePath(
+  Path& rDatabasePath,
+  std::list<Filter> const& rExtensionFilter)
+{
+  rDatabasePath = boost::filesystem::unique_path();
+  return true;
+}
+
+bool Medusa::DefaultModuleSelector(BinaryStream::SPType spBinStrm, Database::SPType& rspDatabase, Loader::SPType& rspLoader,
+                                   Architecture::VSPType& rspArchitectures, OperatingSystem::SPType& rspOperatingSystem)
+{
+  auto& rModMgr = ModuleManager::Instance();
+  auto AllDbs = rModMgr.GetDatabases();
+  if (AllDbs.empty())
+    return false;
+  rspDatabase =  AllDbs.front();
+  auto AllLdrs = rModMgr.GetLoaders();
+  if (AllLdrs.empty())
+    return false;
+  rspLoader = AllLdrs.front();
+  rspArchitectures = rModMgr.GetArchitectures();
+  rspLoader->FilterAndConfigureArchitectures(rspArchitectures);
+  if (rspArchitectures.empty())
+    return false;
+  rspOperatingSystem = rModMgr.GetOperatingSystem(rspLoader, rspArchitectures.front());
+  return true;
+}
+
 bool Medusa::NewDocument(
-  fs::path const& rFilePath,
+  BinaryStream::SPType spBinStrm,
+  bool StartAnalyzer,
   Medusa::AskDatabaseFunctionType AskDatabase,
   Medusa::ModuleSelectorFunctionType ModuleSelector,
   Medusa::FunctionType BeforeStart,
@@ -119,11 +157,13 @@ bool Medusa::NewDocument(
 {
   try
   {
-    BinaryStream::SharedPtr spFileBinStrm = std::make_shared<FileBinaryStream>(rFilePath.wstring());
-    Log::Write("core") << "opening \"" << rFilePath.string() << "\"" << LogEnd;
     auto& rModMgr = ModuleManager::Instance();
     rModMgr.UnloadModules(); // Make sure we don't have loaded modules in memory
-    rModMgr.LoadModules(L".", *spFileBinStrm); // TODO: Let the user select the folder
+    UserConfiguration UserCfg;
+    auto ModPath = UserCfg.GetOption("core.modules_path");
+    if (ModPath.empty())
+      ModPath = ".";
+    rModMgr.LoadModules(ModPath, *spBinStrm);
 
     auto const& AllLdrs = rModMgr.GetLoaders();
     if (AllLdrs.empty())
@@ -139,12 +179,12 @@ bool Medusa::NewDocument(
       return false;
     }
 
-    Database::SharedPtr spCurDb;
-    Loader::SharedPtr spCurLdr;
-    Architecture::VectorSharedPtr spCurArchs;
-    OperatingSystem::SharedPtr spCurOs;
+    Database::SPType spCurDb;
+    Loader::SPType spCurLdr;
+    Architecture::VSPType spCurArchs;
+    OperatingSystem::SPType spCurOs;
 
-    if (!ModuleSelector(spFileBinStrm, spCurDb, spCurLdr, spCurArchs, spCurOs))
+    if (!ModuleSelector(spBinStrm, spCurDb, spCurLdr, spCurArchs, spCurOs))
       return false;
 
     if (spCurDb == nullptr)
@@ -160,12 +200,12 @@ bool Medusa::NewDocument(
     }
 
     bool Force = false;
-    fs::path DbPath = rFilePath;
+    Path DbPath = spBinStrm->GetPath();
     DbPath += spCurDb->GetExtension().c_str();
     while (!spCurDb->Create(DbPath, Force))
     {
       Log::Write("core") << "unable to create database file \"" << DbPath.string() << "\"" << LogEnd;
-      fs::path NewDbPath = DbPath;
+      Path NewDbPath = DbPath;
       std::list<Filter> ExtList;
       ExtList.push_back(std::make_tuple(spCurDb->GetName(), spCurDb->GetExtension()));
       if (!AskDatabase(NewDbPath, ExtList))
@@ -179,7 +219,7 @@ bool Medusa::NewDocument(
 
     if (!BeforeStart())
       return false;
-    if (!Start(spFileBinStrm, spCurDb, spCurLdr, spCurArchs, spCurOs))
+    if (!Start(spBinStrm, spCurDb, spCurLdr, spCurArchs, spCurOs, StartAnalyzer))
       return false;
     if (!AfterStart())
       return false;
@@ -199,20 +239,24 @@ bool Medusa::OpenDocument(AskDatabaseFunctionType AskDatabase)
   try
   {
     rModMgr.UnloadModules();
-    rModMgr.LoadDatabases(".");
+    UserConfiguration UserCfg;
+    auto ModPath = UserCfg.GetOption("core.modules_path");
+    if (ModPath.empty())
+      ModPath = ".";
+    rModMgr.LoadDatabases(ModPath);
 
     auto const& AllDbs = rModMgr.GetDatabases();
     std::list<Filter> ExtList;
     for (auto itDb = std::begin(AllDbs), itEnd = std::end(AllDbs); itDb != itEnd; ++itDb)
       ExtList.push_back(std::make_tuple((*itDb)->GetName(), (*itDb)->GetExtension()));
 
-    fs::path DbPath;
+    Path DbPath;
     if (!AskDatabase(DbPath, ExtList))
       return false;
 
-    Database::SharedPtr spDb;
+    Database::SPType spDb;
     for (auto itDb = std::begin(AllDbs), itEnd = std::end(AllDbs); itDb != itEnd; ++itDb)
-      if ((*itDb)->IsCompatible(DbPath.wstring()))
+      if ((*itDb)->IsCompatible(DbPath))
       {
         spDb = *itDb;
         break;
@@ -224,14 +268,18 @@ bool Medusa::OpenDocument(AskDatabaseFunctionType AskDatabase)
       return false;
     }
 
-    if (!spDb->Open(DbPath.wstring()))
+    if (!spDb->Open(DbPath))
     {
       Log::Write("core") << "unable to open database" << LogEnd;
       return false;
     }
 
     rModMgr.UnloadModules();
-    rModMgr.LoadModules(L".", *spDb->GetBinaryStream());
+    ModPath = UserCfg.GetOption("core.modules_path");
+    if (ModPath.empty())
+      ModPath = ".";
+    rModMgr.LoadDatabases(ModPath);
+    rModMgr.LoadModules(ModPath, *spDb->GetBinaryStream());
 
     Log::Write("core") << "opening database \"" << DbPath.string() << "\"" << LogEnd;
 
@@ -266,9 +314,9 @@ bool Medusa::CloseDocument(void)
   return true;
 }
 
-void Medusa::Analyze(Address const& rAddr, Architecture::SharedPtr spArch, u8 Mode)
+void Medusa::Analyze(Address const& rAddr, Architecture::SPType spArch, u8 Mode)
 {
-  Cell::SPtr spCell = nullptr;
+  Cell::SPType spCell = nullptr;
 
   if (Mode == 0)
   {
@@ -295,20 +343,20 @@ void Medusa::Analyze(Address const& rAddr, Architecture::SharedPtr spArch, u8 Mo
   if (Mode == 0)
     Mode = spArch->GetDefaultMode(rAddr);
 
-  AddTask(m_Analyzer.CreateDisassembleTask(m_Document, rAddr, *spArch, Mode));
+  AddTask(m_Analyzer.CreateTask("disassemble with", m_Document, rAddr, *spArch, Mode));
 }
 
-bool Medusa::BuildControlFlowGraph(Address const& rAddr, ControlFlowGraph& rCfg) const
+bool Medusa::BuildControlFlowGraph(Address const& rAddr, ControlFlowGraph& rCfg)
 {
   return m_Analyzer.BuildControlFlowGraph(m_Document, rAddr, rCfg);
 }
 
-Cell::SPtr Medusa::GetCell(Address const& rAddr)
+Cell::SPType Medusa::GetCell(Address const& rAddr)
 {
   return m_Document.GetCell(rAddr);
 }
 
-Cell::SPtr const Medusa::GetCell(Address const& rAddr) const
+Cell::SPType const Medusa::GetCell(Address const& rAddr) const
 {
   return m_Document.GetCell(rAddr);
 }
@@ -341,23 +389,23 @@ bool Medusa::FormatMultiCell(
 
 Address Medusa::MakeAddress(TOffset Offset)
 {
-  return MakeAddress(Loader::SharedPtr(), Architecture::SharedPtr(), 0x0, Offset);
+  return MakeAddress(Loader::SPType(), Architecture::SPType(), 0x0, Offset);
 }
 
 Address Medusa::MakeAddress(TBase Base, TOffset Offset)
 {
-  return MakeAddress(Loader::SharedPtr(), Architecture::SharedPtr(), Base, Offset);
+  return MakeAddress(Loader::SPType(), Architecture::SPType(), Base, Offset);
 }
 
-Address Medusa::MakeAddress(Loader::SharedPtr pLoader, Architecture::SharedPtr pArch, TOffset Offset)
+Address Medusa::MakeAddress(Loader::SPType pLoader, Architecture::SPType pArch, TOffset Offset)
 {
   return MakeAddress(pLoader, pArch, 0x0, Offset);
 }
 
-Address Medusa::MakeAddress(Loader::SharedPtr pLoader, Architecture::SharedPtr pArch, TBase Base, TOffset Offset)
+Address Medusa::MakeAddress(Loader::SPType pLoader, Architecture::SPType pArch, TBase Base, TOffset Offset)
 {
   Address NewAddr = m_Document.MakeAddress(Base, Offset);
-  if (NewAddr.GetAddressingType() == Address::UnknownType)
+  if (NewAddr.GetAddressingType() != Address::UnknownType)
     return NewAddr;
 
   return Address(Base, Offset);
@@ -365,18 +413,32 @@ Address Medusa::MakeAddress(Loader::SharedPtr pLoader, Architecture::SharedPtr p
 
 bool Medusa::CreateFunction(Address const& rAddr)
 {
-  AddTask(m_Analyzer.CreateMakeFunctionTask(m_Document, rAddr));
-  return true;
+  return AddTask(m_Analyzer.CreateTask("create function", m_Document, rAddr));
 }
 
-void Medusa::TrackOperand(Address const& rStartAddress, Analyzer::Tracker& rTracker)
+bool Medusa::CreateUtf8String(Address const& rAddr)
 {
-  m_Analyzer.TrackOperand(m_Document, rStartAddress, rTracker);
+  return AddTask(m_Analyzer.CreateTask("create utf-8 string", m_Document, rAddr));
 }
 
-void Medusa::BacktrackOperand(Address const& rStartAddress, Analyzer::Tracker& rTracker)
+bool Medusa::CreateUtf16String(Address const& rAddr)
 {
-  m_Analyzer.BacktrackOperand(m_Document, rStartAddress, rTracker);
+  return AddTask(m_Analyzer.CreateTask("create utf-16 string", m_Document, rAddr));
+}
+
+bool Medusa::AddTask(std::string const& rTaskName)
+{
+  return AddTask(m_Analyzer.CreateTask(rTaskName, m_Document));
+}
+
+bool Medusa::AddTask(std::string const& rTaskName, Address const& rAddr)
+{
+  return AddTask(m_Analyzer.CreateTask(rTaskName, m_Document, rAddr));
+}
+
+bool Medusa::AddTask(std::string const& rTaskName, Address const& rAddr, Architecture& rArch, u8 Mode)
+{
+  return AddTask(m_Analyzer.CreateTask(rTaskName, m_Document, rAddr, rArch, Mode));
 }
 
 MEDUSA_NAMESPACE_END

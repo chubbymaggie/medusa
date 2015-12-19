@@ -1,5 +1,5 @@
-#ifndef _MEDUSA_CELL_
-#define _MEDUSA_CELL_
+#ifndef MEDUSA_CELL_HPP
+#define MEDUSA_CELL_HPP
 
 #include <list>
 #include <string>
@@ -7,10 +7,6 @@
 #include <memory>
 
 #include <medusa/cell_data.hpp>
-
-#ifdef _MSC_VER
-# pragma warning(disable: 4251)
-#endif
 
 MEDUSA_NAMESPACE_BEGIN
 
@@ -27,7 +23,7 @@ public:
     StringType        //! String cell.
   };
 
-  typedef std::shared_ptr<Cell> SPtr;
+  typedef std::shared_ptr<Cell> SPType;
 
   /*! Cell constructor.
    * \param Type defines the type of cell @see Type.
@@ -42,7 +38,7 @@ public:
     m_spDna = std::make_shared<CellData>(Type, SubType, Size);
   }
 
-  Cell(CellData::SPtr spDna) : m_spDna(spDna) {}
+  Cell(CellData::SPType spDna) : m_spDna(spDna) {}
 
   virtual ~Cell(void) { }
 
@@ -59,14 +55,14 @@ public:
   //! This method returns the used architecture tag.
   Tag GetArchitectureTag(void) const { return m_spDna->GetArchitectureTag(); }
 
-  CellData::SPtr GetData(void) { return m_spDna; }
+  CellData::SPType GetData(void) { return m_spDna; }
 
   //! This method returns the internal data
 
 protected:
-  CellData::SPtr m_spDna;
+  CellData::SPType m_spDna;
 };
 
 MEDUSA_NAMESPACE_END
 
-#endif // !_MEDUSA_CELL_
+#endif // !MEDUSA_CELL_HPP

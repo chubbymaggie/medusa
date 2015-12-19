@@ -1,5 +1,5 @@
-#ifndef _MEDUSA_OS_
-#define _MEDUSA_OS_
+#ifndef MEDUSA_OS_HPP
+#define MEDUSA_OS_HPP
 
 #include "medusa/export.hpp"
 #include "medusa/namespace.hpp"
@@ -22,24 +22,35 @@
 
 MEDUSA_NAMESPACE_BEGIN
 
-class Medusa_EXPORT OperatingSystem
+class Medusa_EXPORT OperatingSystem : public IsConfigurable
 {
 public:
-  typedef boost::shared_ptr<OperatingSystem> SharedPtr;
-  typedef std::vector<SharedPtr>             VectorSharedPtr;
+  typedef std::shared_ptr<OperatingSystem> SPType;
+  typedef std::vector<SPType>              VSPType;
 
   virtual ~OperatingSystem(void) {}
 
   virtual std::string GetName(void) const = 0;
-  virtual bool InitializeCpuContext(Document const& rDoc, CpuContext& rCpuCtxt) const = 0;
-  virtual bool InitializeMemoryContext(Document const& rDoc, MemoryContext& rMemCtxt) const = 0;
   virtual bool IsSupported(Loader const& rLdr, Architecture const& rArch) const = 0;
-  virtual bool ProvideDetails(Document& rDoc) const = 0;
+
+  virtual bool InitializeContext(
+    Document const& rDoc,
+    CpuContext& rCpuCtxt, MemoryContext& rMemCtxt,
+    std::vector<std::string> const& rArgs, std::vector<std::string> const& rEnv, std::string const& rCurWrkDir) const = 0;
+
   virtual bool AnalyzeFunction(Document& rDoc, Address const& rAddress) = 0;
+  virtual Expression::LSPType ExecuteSymbol(Document& rDoc, Address const& rSymAddr) = 0;
+
+  virtual bool HandleException(CpuContext& rCpuCtxt) { return false; }
+
+  virtual bool ProvideDetails(Document& rDoc) const = 0;
+  virtual bool GetValueDetail(Id ValueId, ValueDetail& rValDtl) const = 0;
+  virtual bool GetFunctionDetail(Id FunctionId, FunctionDetail& rFcnDtl) const = 0;
+  virtual bool GetStructureDetail(Id StructureId, StructureDetail& rStructDtl) const = 0;
 };
 
 typedef OperatingSystem* (*TGetOperatingSystem)(void);
 
 MEDUSA_NAMESPACE_END
 
-#endif // !_MEDUSA_OS_
+#endif // !MEDUSA_OS_HPP

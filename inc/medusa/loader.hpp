@@ -1,5 +1,5 @@
-#ifndef _MEDUSA_LOADER_
-#define _MEDUSA_LOADER_
+#ifndef MEDUSA_LOADER_HPP
+#define MEDUSA_LOADER_HPP
 
 #include "medusa/export.hpp"
 #include "medusa/namespace.hpp"
@@ -18,23 +18,23 @@
 
 MEDUSA_NAMESPACE_BEGIN
 
-class Medusa_EXPORT Loader
+class Medusa_EXPORT Loader : public IsConfigurable
 {
 public:
-  typedef boost::shared_ptr<Loader> SharedPtr;
-  typedef std::vector<SharedPtr>    VectorSharedPtr;
+  typedef std::shared_ptr<Loader> SPType;
+  typedef std::vector<SPType>    VSPType;
 
   virtual            ~Loader(void) {}
 
   virtual std::string GetName(void) const = 0;
   virtual u8          GetDepth(void) const = 0;
   virtual bool        IsCompatible(BinaryStream const& rBinStrm) = 0;
-  virtual void        Map(Document& rDoc, Architecture::VectorSharedPtr const& rArchs) = 0;
-  virtual void        FilterAndConfigureArchitectures(Architecture::VectorSharedPtr& rArchs) const = 0;
+  virtual void        Map(Document& rDoc, Architecture::VSPType const& rArchs) = 0;
+  virtual void        FilterAndConfigureArchitectures(Architecture::VSPType& rArchs) const = 0;
 };
 
 typedef Loader* (*TGetLoader)(void);
 
 MEDUSA_NAMESPACE_END
 
-#endif // _MEDUSA_LOADER_
+#endif // MEDUSA_LOADER_HPP

@@ -19,6 +19,9 @@ TextDatabase::TextDatabase(void) : m_DirtyLabels(false), m_IsIteratingLabels(fal
 
 TextDatabase::~TextDatabase(void)
 {
+  std::lock_guard<std::mutex> Lock(m_MemoryAreaLock);
+  for (auto* pMemArea : m_MemoryAreas)
+    delete pMemArea;
 }
 
 std::string TextDatabase::GetName(void) const
@@ -346,7 +349,7 @@ bool TextDatabase::Flush(void)
     for (MemoryArea* pMemArea : m_MemoryAreas)
     {
       TextFile << pMemArea->Dump() << "\n" << std::flush;
-      pMemArea->ForEachCellData([&](TOffset Offset, CellData::SPtr spCellData)
+      pMemArea->ForEachCellData([&](TOffset Offset, CellData::SPType spCellData)
       {
         TextFile << "|" << Offset << " " << spCellData->Dump() << "\n" << std::flush;
       });
@@ -531,7 +534,7 @@ bool TextDatabase::AddLabel(Address const& rAddress, Label const& rLabel)
 
 bool TextDatabase::RemoveLabel(Address const& rAddress)
 {
-  boost::lock_guard<std::recursive_mutex> Lock(m_LabelLock);
+  std::lock_guard<std::recursive_mutex> Lock(m_LabelLock);
 
   auto itLbl = m_LabelMap.left.find(rAddress);
   if (itLbl == std::end(m_LabelMap.left))
@@ -633,10 +636,10 @@ bool TextDatabase::HasCrossReferenceTo(Address const& rFrom) const
   return m_CrossReferences.HasXRefTo(rFrom);
 }
 
-bool TextDatabase::GetCrossReferenceTo(Address const& rFrom, Address& rTo) const
+bool TextDatabase::GetCrossReferenceTo(Address const& rFrom, Address::List& rToList) const
 {
   std::lock_guard<std::mutex> Lock(m_CrossReferencesLock);
-  return m_CrossReferences.To(rFrom, rTo);
+  return m_CrossReferences.To(rFrom, rToList);
 }
 
 bool TextDatabase::AddMultiCell(Address const& rAddress, MultiCell const& rMultiCell)
@@ -691,7 +694,7 @@ bool TextDatabase::SetCellData(Address const& rAddress, CellData const& rCellDat
     }
   if (pCurMemArea == nullptr)
     return false;
-  CellData::SPtr spCellData = std::make_shared<CellData>(rCellData);
+  CellData::SPType spCellData = std::make_shared<CellData>(rCellData);
   return pCurMemArea->SetCellData(rAddress.GetOffset(), spCellData, rDeletedCellAddresses, Force);
 }
 
@@ -777,7 +780,14 @@ bool TextDatabase::_MoveAddressBackward(Address const& rAddress, Address& rMoved
 
   u64 CurMemAreaOff = (rAddress.GetOffset() - (*itMemArea)->GetBaseAddress().GetOffset());
   if (static_cast<u64>(-Offset) <= CurMemAreaOff)
-    return (*itMemArea)->MoveAddressBackward(rAddress, rMovedAddress, Offset);
+    if (!(*itMemArea)->MoveAddressBackward(rAddress, rMovedAddress, Offset))
+    {
+      // TODO(wisk): this behavior is incorrect...
+      rMovedAddress = (*itMemArea)->GetBaseAddress();
+      return true;
+    }
+    else
+      return true;
   Offset += CurMemAreaOff;
 
   if (itMemArea == std::begin(m_MemoryAreas))
@@ -800,7 +810,11 @@ bool TextDatabase::_MoveAddressBackward(Address const& rAddress, Address& rMoved
     --itMemArea;
   }
 
-  return (*itMemArea)->MoveAddressBackward(CurAddr, rMovedAddress, Offset);
+  if ((*itMemArea)->MoveAddressBackward(CurAddr, rMovedAddress, Offset))
+    return true;
+  // TODO(wisk): this behavior is incorrect...
+  rMovedAddress = (*itMemArea)->GetBaseAddress();
+  return true;
 }
 
 bool TextDatabase::_MoveAddressForward(Address const& rAddress, Address& rMovedAddress, s64 Offset) const

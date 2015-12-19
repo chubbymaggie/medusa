@@ -1,5 +1,5 @@
-#ifndef _MEDUSA_
-#define _MEDUSA_
+#ifndef MEDUSA_CORE_HPP
+#define MEDUSA_CORE_HPP
 
 #include "medusa/namespace.hpp"
 #include "medusa/binary_stream.hpp"
@@ -24,12 +24,6 @@
 #include <boost/shared_ptr.hpp>
 #include <boost/filesystem/path.hpp>
 
-#ifdef _MSC_VER
-# pragma warning(disable: 4251)
-#endif
-
-namespace fs = boost::filesystem;
-
 MEDUSA_NAMESPACE_BEGIN
 
 //! Medusa is a main class, it's able to handle almost all sub-classes.
@@ -41,38 +35,52 @@ public:
 
   static std::string              GetVersion(void);
 
-  void                            AddTask(Task* pTask);
+  bool                            AddTask(Task* pTask);
   void                            WaitForTasks(void);
 
   bool                            Start(
-    BinaryStream::SharedPtr spBinaryStream,
-    Database::SharedPtr spDatabase,
-    Loader::SharedPtr spLoader,
-    Architecture::VectorSharedPtr spArchitectures,
-    OperatingSystem::SharedPtr spOperatingSystem);
+    BinaryStream::SPType spBinaryStream,
+    Database::SPType spDatabase,
+    Loader::SPType spLoader,
+    Architecture::VSPType spArchitectures,
+    OperatingSystem::SPType spOperatingSystem,
+    bool StartAnalyzer = true);
 
   typedef std::tuple<std::string, std::string> Filter;
   typedef std::function<bool (
-    fs::path& rDatabasePath,
+    Path& rDatabasePath,
     std::list<Filter> const& rExtensionFilter
     )> AskDatabaseFunctionType;
 
+  static bool IgnoreDatabasePath(
+    Path& rDatabasePath,
+    std::list<Filter> const& rExtensionFilter);
+
   typedef std::function<bool (
-    BinaryStream::SharedPtr spBinStrm,
-    Database::SharedPtr& rspDatabase,
-    Loader::SharedPtr& rspLoader,
-    Architecture::VectorSharedPtr& rspArchitectures,
-    OperatingSystem::SharedPtr& rspOperatingSystem
+    BinaryStream::SPType& rspBinStrm,
+    Database::SPType& rspDatabase,
+    Loader::SPType& rspLoader,
+    Architecture::VSPType& rspArchitectures,
+    OperatingSystem::SPType& rspOperatingSystem
     )> ModuleSelectorFunctionType;
 
   typedef std::function<bool (void)> FunctionType;
 
+  static bool DefaultModuleSelector(
+    BinaryStream::SPType spBinStrm,
+    Database::SPType& rspDatabase,
+    Loader::SPType& rspLoader,
+    Architecture::VSPType& rspArchitectures,
+    OperatingSystem::SPType& rspOperatingSystem
+    );
+
   bool                            NewDocument(
-    fs::path const& rFilePath,
-    AskDatabaseFunctionType AskDatabase,
-    ModuleSelectorFunctionType ModuleSelector,
-    FunctionType BeforeStart,
-    FunctionType AfterStart);
+    BinaryStream::SPType spBinStrm,
+    bool StartAnalyzer = true,
+    AskDatabaseFunctionType AskDatabase = IgnoreDatabasePath,
+    ModuleSelectorFunctionType ModuleSelector = DefaultModuleSelector,
+    FunctionType BeforeStart = [](){ return true; },
+    FunctionType AfterStart  = [](){ return true; });
   bool                            OpenDocument(AskDatabaseFunctionType AskDatabase);
   bool                            CloseDocument(void);
 
@@ -85,16 +93,16 @@ public:
                                    * \param rAddr is the start address of disassembling.
                                    * \param Mode allows to tell which architecture mode should be used
                                    */
-  void                            Analyze(Address const& rAddr, Architecture::SharedPtr spArch = nullptr, u8 Mode = 0);
+  void                            Analyze(Address const& rAddr, Architecture::SPType spArch = nullptr, u8 Mode = 0);
 
                                   /*! This method builds a control flow graph from an address.
                                    * \param rAddr is the start address.
                                    * \param rCfg is the filled control flow graph.
                                    */
-  bool                            BuildControlFlowGraph(Address const& rAddr, ControlFlowGraph& rCfg) const;
+  bool                            BuildControlFlowGraph(Address const& rAddr, ControlFlowGraph& rCfg);
 
-  Cell::SPtr                      GetCell(Address const& rAddr);
-  Cell::SPtr const                GetCell(Address const& rAddr) const;
+  Cell::SPType                      GetCell(Address const& rAddr);
+  Cell::SPType const                GetCell(Address const& rAddr) const;
   bool FormatCell(
     Address       const& rAddress,
     Cell          const& rCell,
@@ -110,30 +118,27 @@ public:
                                   //! This method makes a fully filled Address if possible. @see Address
   Address                         MakeAddress(TOffset Offset);
   Address                         MakeAddress(TBase Base, TOffset Offset);
-  Address                         MakeAddress(Loader::SharedPtr pLoader, Architecture::SharedPtr pArch, TOffset Offset);
-  Address                         MakeAddress(Loader::SharedPtr pLoader, Architecture::SharedPtr pArch, TBase Base, TOffset Offset);
+  Address                         MakeAddress(Loader::SPType pLoader, Architecture::SPType pArch, TOffset Offset);
+  Address                         MakeAddress(Loader::SPType pLoader, Architecture::SPType pArch, TBase Base, TOffset Offset);
 
   bool                            CreateFunction(Address const& rAddr);
+  bool                            CreateUtf8String(Address const& rAddr);
+  bool                            CreateUtf16String(Address const& rAddr);
   void                            FindFunctionAddressFromAddress(Address::List& rFunctionAddress, Address const& rAddress) const;
 
-  bool                            MakeAsciiString(Address const& rAddr)
-  { return m_Analyzer.MakeAsciiString(m_Document, rAddr); }
-  bool MakeWindowsString(Address const& rAddr)
-  { return m_Analyzer.MakeWindowsString(m_Document, rAddr); }
-
-  void TrackOperand(Address const& rStartAddress, Analyzer::Tracker& rTracker);
-  void BacktrackOperand(Address const& rStartAddress, Analyzer::Tracker& rTracker);
-
+  bool                            AddTask(std::string const& rTaskName);
+  bool                            AddTask(std::string const& rTaskName, Address const& rAddr);
+  bool                            AddTask(std::string const& rTaskName, Address const& rAddr, Architecture& rArch, u8 Mode);
 private:
-  TaskManager                      m_TaskManager;
-  Document                         m_Document;
+  TaskManager        m_TaskManager;
+  Document           m_Document;
 
-  Analyzer                         m_Analyzer;
+  Analyzer           m_Analyzer;
 
-  typedef boost::mutex             MutexType;
-  mutable MutexType                m_Mutex;
+  typedef std::mutex MutexType;
+  mutable MutexType  m_Mutex;
 };
 
 MEDUSA_NAMESPACE_END
 
-#endif // _MEDUSA_
+#endif // MEDUSA_CORE_HPP

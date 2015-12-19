@@ -1,5 +1,5 @@
-#ifndef _MEDUSA_OPERAND_
-#define _MEDUSA_OPERAND_
+#ifndef MEDUSA_OPERAND_HPP
+#define MEDUSA_OPERAND_HPP
 
 #include <string>
 
@@ -158,9 +158,9 @@ public:
 
   u8          GetLength(void) const;
   u8          GetRawLength(void) const;
-  u32         GetSizeInBit(void) const;
+  u32         GetBitSize(void) const;
 
-  Expression *GetSemantic(u8 Mode, CpuInformation const* pCpuInfo, u8 InstructionLength = 0, bool Dereference = true) const;
+  Expression::SPType GetSemantic(u8 Mode, CpuInformation const* pCpuInfo, u8 InstructionLength = 0, bool Dereference = true) const;
 
   void        SetType(u64 Type)                  { m_Type     = Type;        }
   void        SetOffset(u8 Offset)               { m_Offset   = Offset;      }
@@ -183,4 +183,4 @@ private:
 
 MEDUSA_NAMESPACE_END
 
-#endif // !_MEDUSA_OPERAND_
+#endif // !MEDUSA_OPERAND_HPP

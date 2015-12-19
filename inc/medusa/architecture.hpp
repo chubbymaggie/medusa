@@ -1,5 +1,5 @@
-#ifndef _MEDUSA_ARCHITECTURE_
-#define _MEDUSA_ARCHITECTURE_
+#ifndef MEDUSA_ARCHITECTURE_HPP
+#define MEDUSA_ARCHITECTURE_HPP
 
 #include "medusa/export.hpp"
 #include "medusa/namespace.hpp"
@@ -10,6 +10,7 @@
 #include "medusa/address.hpp"
 #include "medusa/binary_stream.hpp"
 #include "medusa/context.hpp"
+#include "medusa/calling_convention.hpp"
 #include "medusa/expression.hpp"
 
 #include "medusa/character.hpp"
@@ -33,30 +34,32 @@ MEDUSA_NAMESPACE_BEGIN
 /*! This class defines what an architecture plug-in must implement.
  * Don't forget to export a extern "C" Architecture* GetArchitecture(void) function
  */
-class Medusa_EXPORT   Architecture
+class Medusa_EXPORT Architecture : public IsConfigurable
 {
 public:
-  typedef boost::shared_ptr<Architecture> SharedPtr;
-  typedef std::vector<SharedPtr>          VectorSharedPtr;
-  typedef std::list<SharedPtr>            ListSharedPtr;
-  typedef std::map<Tag, SharedPtr>        TagMap;
-  typedef std::tuple<const char*, u8>     NamedMode;
-  typedef std::vector<NamedMode>          NamedModeVector;
+  typedef std::shared_ptr<Architecture> SPType;
+  typedef std::vector<SPType>           VSPType;
+  typedef std::map<Tag, SPType>         TagMap;
+  typedef std::tuple<const char*, u8>   NamedMode;
+  typedef std::vector<NamedMode>        NamedModeVector;
 
   Architecture(Tag ArchTag);
 
   //! This method returns the name of the current architecture.
-  virtual std::string GetName(void) const = 0;
+  virtual std::string GetName(void) const;
 
   //! This method converts an virtual address to a physical one.
-  virtual bool        Translate(Address const& rVirtAddr, TOffset& rPhysOff) = 0;
+  virtual bool Translate(Address const& rVirtAddr, TOffset& rPhysOff);
+
+  //! This method gets the current address from the instruction address
+  virtual Address CurrentAddress(Address const& rAddr, Instruction const& rInsn) const;
 
   //! This method disassembles one instruction.
-  virtual bool        Disassemble(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode) = 0;
+  virtual bool Disassemble(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
 
   //! This method returns all available mode
   virtual NamedModeVector GetModes(void) const = 0;
-  u8                      GetModeByName(std::string const &rModeName) const;
+  u8 GetModeByName(std::string const &rModeName) const;
 
   //! This method helps the analyzer to guess the correct mode
   virtual u8 GetDefaultMode(Address const& rAddress) const { return 0; }
@@ -64,26 +67,23 @@ public:
   //! This method returns the architecture endianness.
   virtual EEndianness GetEndianness(void) = 0;
 
-  virtual CpuInformation const* GetCpuInformation(void) const = 0;
-  virtual CpuContext*           MakeCpuContext(void)    const = 0;
-  virtual MemoryContext*        MakeMemoryContext(void) const = 0;
+  virtual CpuInformation    const* GetCpuInformation(void) const { return nullptr; }
+  virtual CallingConvention const* GetCallingConvention(std::string const& rCallConvName, u8 Mode) const { return nullptr; }
+  virtual std::vector<std::string> GetCallingConventionNames(void) const { return{}; }
 
-  virtual Expression*           UpdateFlags(Instruction& rInsn, Expression* pResultExpr) { return pResultExpr; }
-  virtual OperationExpression*  SetFlags(Instruction& rInsn, u32 Flags) { return nullptr; }
-  virtual OperationExpression*  ResetFlags(Instruction& rInsn, u32 Flags) { return nullptr; }
-  virtual ConditionExpression*  TestFlags(Instruction& rInsn, u32 Flags) { return nullptr; }
-  virtual ConditionExpression*  TestNotFlags(Instruction& rInsn, u32 Flags) { return nullptr; }
-  virtual OperationExpression*  ExtractFlag(Instruction& rInsn, u32 Flag) { return nullptr; }
+  virtual CpuContext*    MakeCpuContext(void)    const { return nullptr; }
+  virtual MemoryContext* MakeMemoryContext(void) const { return nullptr; }
 
-  void                UpdateId(u8 Id) { m_Tag |= Id; }
 
-  Tag                 GetTag(void) const { return m_Tag; }
+  virtual bool HandleExpression(Expression::LSPType& rExprs, std::string const& rName, Instruction& rInsn, Expression::SPType spResExpr);
+  virtual bool EmitSetExecutionAddress(Expression::VSPType& rExprs, Address const& rAddr, u8 Mode);
 
-  void                AnalyzeFunction(Function const& rFunc);
+  void UpdateId(u8 Id) { m_Tag |= Id; }
+  Tag  GetTag(void) const { return m_Tag; }
 
-  ConfigurationModel& GetConfigurationModel(void) { return m_CfgMdl; }
-  ConfigurationModel const& GetConfigurationModel(void) const { return m_CfgMdl; }
-  bool                DisassembleBasicBlockOnly(void) const { return m_CfgMdl.GetBoolean("Disassembly only basic block"); }
+  void AnalyzeFunction(Function const& rFunc);
+
+  bool DisassembleBasicBlockOnly(void) const { return m_CfgMdl.GetBoolean("Disassembly only basic block"); }
 
   bool FormatTypeDetail(
     TypeDetail const& rTypeDtl,
@@ -114,7 +114,6 @@ public:
     Document      const& rDoc,
     Address       const& rAddress,
     Instruction   const& rInstruction,
-    Operand       const& rOperand,
     u8                   OperandNo,
     PrintData          & rPrintData) const;
 
@@ -173,7 +172,6 @@ public:
     PrintData          & rPrintData) const;
 
 protected:
-  ConfigurationModel m_CfgMdl;
   Tag                m_Tag;
 };
 
@@ -181,4 +179,4 @@ typedef Architecture* (*TGetArchitecture)(void);
 
 MEDUSA_NAMESPACE_END
 
-#endif // _MEDUSA_ARCHITECTURE_
+#endif // MEDUSA_ARCHITECTURE_HPP

@@ -1,5 +1,5 @@
-#ifndef _MEDUSA_DOCUMENT_
-#define _MEDUSA_DOCUMENT_
+#ifndef MEDUSA_DOCUMENT_HPP
+#define MEDUSA_DOCUMENT_HPP
 
 #include "medusa/namespace.hpp"
 #include "medusa/types.hpp"
@@ -15,6 +15,7 @@
 #include "medusa/database.hpp"
 
 #include <set>
+#include <mutex>
 #include <boost/bimap.hpp>
 #include <boost/thread/mutex.hpp>
 #include <boost/thread/locks.hpp>
@@ -57,8 +58,8 @@ public:
       m_QuitConnection.disconnect();
       m_DocumentUpdatedConnection.disconnect();
       m_MemoryAreaUpdatedConnection.disconnect();
-      m_LabelUpdatedConnection.disconnect();
       m_AddressUpdatedConnection.disconnect();
+      m_LabelUpdatedConnection.disconnect();
       m_TaskUpdatedConnection.disconnect();
     }
 
@@ -98,7 +99,7 @@ public:
 
   // Database
 
-  bool                          Use(Database::SharedPtr spDb);
+  bool                          Use(Database::SPType spDb);
   bool                          Flush(void);
 
                                 //! This method remove all memory areas.
@@ -151,18 +152,18 @@ public:
   bool                          GetCrossReferenceFrom(Address const& rTo, Address::List& rFromList) const;
 
   bool                          HasCrossReferenceTo(Address const& rFrom) const;
-  bool                          GetCrossReferenceTo(Address const& rFrom, Address& rTo) const;
+  bool                          GetCrossReferenceTo(Address const& rFrom, Address::List& rToList) const;
 
   // Comment
   bool                          GetComment(Address const& rAddress, std::string& rComment) const;
   bool                          SetComment(Address const& rAddress, std::string const& rComment);
 
   // Cell
-                                /*! This method returns a cell by its address.
-                                 * \return A pointer to a cell if the rAddr is valid, nullptr otherwise.
-                                 */
-  Cell::SPtr                    GetCell(Address const& rAddr);
-  Cell::SPtr const              GetCell(Address const& rAddr) const;
+                               /*! This method returns a cell by its address.
+                                * \return A pointer to a cell if the rAddr is valid, nullptr otherwise.
+                                */
+  Cell::SPType                  GetCell(Address const& rAddr);
+  Cell::SPType const            GetCell(Address const& rAddr) const;
 
   u8                            GetCellType(Address const& rAddr) const;
   u8                            GetCellSubType(Address const& rAddr) const;
@@ -173,8 +174,8 @@ public:
                                  * \param Force makes the old cell to be deleted.
                                  * \return Returns true if the new cell is added, otherwise it returns false.
                                  */
-  bool                          SetCell(Address const& rAddr, Cell::SPtr spCell, bool Force = false);
-  bool                          SetCellWithLabel(Address const& rAddr, Cell::SPtr spCell, Label const& rLabel, bool Force = false);
+  bool                          SetCell(Address const& rAddr, Cell::SPType spCell, bool Force = false);
+  bool                          SetCellWithLabel(Address const& rAddr, Cell::SPType spCell, Label const& rLabel, bool Force = false);
 
   bool                          DeleteCell(Address const& rAddr);
 
@@ -268,9 +269,14 @@ public:
 private:
   void RemoveLabelIfNeeded(Address const& rAddr);
 
-  typedef boost::mutex MutexType;
+  bool _ApplyStructure(Address const& rAddr, StructureDetail const& rStructDtl);
+  bool _ApplyTypedValue(Address const& rParentAddr, Address const& rTpValAddr, TypedValueDetail const& rTpValDtl);
+  bool _ApplyType(Address const& rAddr, TypeDetail::SPType const& rspTpDtl);
+  bool _ApplyValue(Address const& rAddr, ValueDetail const& rValDtl);
 
-  Database::SharedPtr                     m_spDatabase;
+  typedef std::mutex MutexType;
+
+  Database::SPType                        m_spDatabase;
   MultiCell::Map                          m_MultiCells;
   mutable MutexType                       m_CellMutex;
 
@@ -288,4 +294,4 @@ private:
 
 MEDUSA_NAMESPACE_END
 
-#endif // _MEDUSA_DOCUMENT_
+#endif // MEDUSA_DOCUMENT_HPP

@@ -1,5 +1,5 @@
-#ifndef __MEDUSA_DISASSEMBLY_VIEW_HPP__
-#define __MEDUSA_DISASSEMBLY_VIEW_HPP__
+#ifndef MEDUSA_DISASSEMBLY_VIEW_HPP
+#define MEDUSA_DISASSEMBLY_VIEW_HPP
 
 #include "medusa/namespace.hpp"
 #include "medusa/export.hpp"
@@ -40,7 +40,8 @@ public:
   enum Flags
   {
     ShowAddress        = 1 << 0,
-    AddSpaceBeforeXref = 1 << 1
+    AddSpaceBeforeXref = 1 << 1,
+    Indent             = 1 << 2,
   };
 
   FormatDisassembly(Medusa const& rCore, PrintData& rPrintData) : m_rCore(rCore), m_rPrintData(rPrintData) {}
@@ -88,8 +89,8 @@ public:
   FullDisassemblyView(Medusa& rCore, u32 FormatFlags, u32 Width, u32 Height, Address const& rAddress);
   virtual ~FullDisassemblyView(void);
 
-  Cell::SPtr       GetCellFromPosition(u32 xChar, u32 yChar);
-  Cell::SPtr const GetCellFromPosition(u32 xChar, u32 yChar) const;
+  Cell::SPType       GetCellFromPosition(u32 xChar, u32 yChar);
+  Cell::SPType const GetCellFromPosition(u32 xChar, u32 yChar) const;
   void             GetDimension(u32& rWidth, u32& rHeight) const;
 
   void             Resize(u32 Width, u32 Height);
@@ -101,7 +102,7 @@ public:
   bool             MoveSelection(s32 xOffset, s32 yOffset, bool& rInvalideView);
   bool             SetSelection(u32 xOffset, u32 yOffset);
 
-  bool             GoTo(Address const& rAddress);
+  bool             GoTo(Address const& rAddress, bool SaveHistory = true);
   bool             GetAddressFromPosition(Address& rAddress, u32 xPos, u32 yPos) const;
 
   void             BeginSelection(u32 x, u32 y);        //! Absolute to the view
@@ -154,4 +155,4 @@ protected:
 
 MEDUSA_NAMESPACE_END
 
-#endif // !__MEDUSA_DISASSEMBLY_VIEW_HPP__
+#endif // !MEDUSA_DISASSEMBLY_VIEW_HPP

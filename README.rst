@@ -4,14 +4,25 @@ Medusa
 Medusa is a disassembler designed to be both modular and interactive.
 It runs on Windows and Linux, it should be the same on OSX.
 This project is organized as a library. To disassemble a file you have to use
-medusa_dummy or qMedusa.
-wxMedusa and pydusa are not available anymore.
+medusa_text or qMedusa.
+An experimental emulator is also available.
+
+Build-bot
+=========
+
+
++--------+-------------------------------------------------------------+-----------------------------------------------------------------------------------------------+
+| branch | Travis                                                      | AppVeyor                                                                                      |
++========+=============================================================+===============================================================================================+
+| dev    | |unix_build|                                                | |windows_build|                                                                               |
++--------+-------------------------------------------------------------+-----------------------------------------------------------------------------------------------+
 
 Prerequisites
 =============
 
-Medusa requires the following libraries: `boost <http://www.boost.org>`_ (system, filesystem, thread, date_time), `OGDF <http://www.ogdf.net>`_, and `Qt5 <http://qt-project.org>`_ for the GUI.
-You also need `CMake <http://www.cmake.org>`_ for compilation.
+Medusa requires the following libraries: `boost >= 1.55 <http://www.boost.org>`_ (system, filesystem, thread, date_time), `OGDF <http://www.ogdf.net>`_ (required git), and `Qt5 >= 5.2 <http://qt-project.org>`_ for the GUI.
+You also need `CMake <http://www.cmake.org>`_ for compilation and a C++11 compiler (VS2013 update 4 on Windows).
+Git is optional but allows to clone remote repository for specific features, see *Compilation/Options*.
 
 Feature
 =======
@@ -23,7 +34,7 @@ Feature
 +=========+=========+========+========+=========+===========================================+
 | ELF     | yes     | yes    | no     | no      | Some kind of reloc are not handled        |
 +---------+---------+--------+--------+---------+-------------------------------------------+
-| PE      | yes     | yes    | yes    | no      |                                           |
+| PE      | yes     | yes    | yes    | no      | Reloc are not handled                     |
 +---------+---------+--------+--------+---------+-------------------------------------------+
 | Mach-O  | yes     | yes    | no     | no      | - Doesn't support FAT binary              |
 |         |         |        |        |         | - on X86, esi as glbptr is not handled    |
@@ -37,17 +48,17 @@ Feature
 +------+---------+-------------+----------+----------------------+
 | Name | Mode    | Disassembly | Semantic | Notes                |
 +======+=========+=============+==========+======================+
-| x86  | 16-bit  | yes         | yes      |                      |
-+------+---------+-------------+----------+----------------------+
-| x86  | 32-bit  | yes         | partial  | Support until SEE4.2 |
-+------+---------+-------------+----------+----------------------+
-| x86  | 64-bit  | yes         | partial  |                      |
+| x86  | 16-bit  | yes         | partial  |                      |
++------+---------+-------------+          |                      |
+| x86  | 32-bit  | yes         |          | Support until SEE4.2 |
++------+---------+-------------+          |                      |
+| x86  | 64-bit  | yes         |          |                      |
 +------+---------+-------------+----------+----------------------+
 | z80  | gameboy | yes         | yes      |                      |
 +------+---------+-------------+----------+----------------------+
-| avr8 |         | yes         | no       |                      |
+| avr8 |         | no          | no       | Broken               |
 +------+---------+-------------+----------+----------------------+
-| arm  | normal  | partial     | no       | Experimental         |
+| arm  | normal  | partial     | partial  |                      |
 +------+---------+-------------+----------+                      |
 | arm  | thumb   | partial     | no       |                      |
 +------+---------+-------------+----------+                      |
@@ -59,30 +70,36 @@ Feature
 +--------+---------------+---------+-------+---------+----------+----------+
 | Name   | interactivity | Comment | Label | Graph   | Database | Notes    |
 +========+===============+=========+=======+=========+==========+==========+
-| qt     | partial       | yes     | yes   | yes     | partial  |          |
+| qt     | partial       | yes     | yes   | yes     | yes      |          |
 +--------+---------------+---------+-------+---------+----------+----------+
-| dummy  | no            | no      | no    | no      | no       | outdated |
-+--------+---------------+---------+-------+---------+----------+----------+
-| python | no            | no      | no    | no      | no       | broken   |
+| text   | no            | no      | no    | no      | yes      |          |
 +--------+---------------+---------+-------+---------+----------+----------+
 
-+-----------------------+
-| Database              |
-+------+---------+------+
-| Name | Save    | Load |
-+======+=========+======+
-| text | yes     | yes  |
-+------+---------+------+
++----------------+
+| Binding        |
++--------+-------+
+| Name   | Notes |
++========+=======+
+| Python | WIP   |
++--------+-------+
 
-+-------------------------------+
-| Operating System              |
-+---------+---------------------+
-| Name    | Notes               |
-+=========+=====================+
-| UNIX    | Not yet implemented |
-+---------+                     |
-| Windows |                     |
-+---------+---------------------+
++------------------------------------+
+| Database                           |
++------+---------+------+------------+
+| Name | Save    | Load | Notes      |
++======+=========+======+============+
+| text | yes     | yes  | Incomplete |
++------+---------+------+------------+
+
++------------------+
+| Operating System |
++---------+--------+
+| Name    | Notes  |
++=========+========+
+| UNIX    | WIP    |
++---------+        |
+| Windows |        |
++---------+--------+
 
 
 Roadmap
@@ -101,43 +118,38 @@ Each versions of Medusa bring a new specific feature.
 Compilation
 ===========
 
-First, we need to retrieve and compile the library OGDF (Windows users must execute cmake command from *Visual Studio (...) Command Prompt*):
+First off, you need boost libraries; you can either download a built version or compile yourself. Boost is available `here <http://www.boost.org/users/history/version_1_55_0.html>`_
 
-.. code-block:: bash
-
-  git clone https://github.com/ogdf/ogdf
-  cd ogdf
-
-  mkdir _release
-  cd _release
-  cmake -DCMAKE_BUILD_TYPE=Release ..
-  make  # if you use Makefile (usually UNIX users)
-  nmake # if you use NMakefile (Windows users)
-
-  cd ..
-
-  mkdir _debug
-  cd _debug
-  cmake -DCMAKE_BUILD_TYPE=Debug ..
-  make or nmake
-
-
-Next step is the Boost installation, you can either download a built version or compile yourself. Boost is available `here <http://www.boost.org/users/history/version_1_55_0.html>`_
-
-Now, make sure you have installed Qt5 if you need a graphical user interface (and I'm pretty sure you do ;)). Pick the right version on the `official website <http://qt-project.org/downloads>`_ or use your package manager.
+Now, make sure you have installed Qt5 if you need a graphical user interface (and I'm pretty sure you do ;)). Medusa requires at least the version 5.2, be sure to pick the good version on the `official website <http://qt-project.org/downloads>`_ or use your package manager.
 
 Finally, we're ready to retrieve and compile medusa:
 
 .. code-block:: bash
 
-  git clone https://github.com/wisk/medusa
+  git clone https://github.com/wisk/medusa.git
   mkdir build
   cd build
-  cmake -DOGDF_PATH:PATH=<Path to the OGDF directory> -DBOOST_ROOT:PATH=<path to the boost directory> -DQT5_CMAKE_PATH:PATH=<Path to Qt5 cmake scripts directory> ..
+  # UNIX users should define CMAKE_BUILD_TYPE e.g. -DCMAKE_BUILD_TYPE=Release to compile Medusa with optimizatin
+  cmake -DBOOST_ROOT:PATH=<path to the boost directory> -DQT5_CMAKE_PATH:PATH=<Path to Qt5 cmake scripts directory> ..
 
-Note: If CMake is unable to find Boost, try to define **BOOST_LIBRARYDIR** instead. This variable must be set to the library directory (e.g.: *C:\\boost_1_55_0\\lib64-msvc-11.0*).
-In my configuration, **QT5_CMAKE_PATH** is set to */usr/lib/cmake* on ArchLinux and *C:\\Qt\\Qt5.0.2\\5.0.2\\msvc2012_64\\lib\\cmake* on Windows.
-For Windows users, you should probably add **-G"Visual Studio XX <Win64>"** where *XX* is your Visual Studio version and *<Win64>* if you build medusa in 64-bit.
+  # for UNIX users
+  make && cd bin && ./qMedusa
+
+  # for Windows users
+  explorer Medusa.sln
+
+
+Note: If CMake is unable to find Boost on Windows, try to define **BOOST_LIBRARYDIR**. This variable must be set to the library directory (e.g.: *C:\\boost_1_55_0\\lib64-msvc-11.0*).
+In my configuration, **QT5_CMAKE_PATH** is set to */usr/lib/cmake* on ArchLinux and *%USERPROFILE%\\Sources\\qt-5.3.0-x64-msvc2012-compact\\lib\\cmake* on Windows.
+For Windows users, you should probably add **-G"Visual Studio XX Win64"** where *XX* is your Visual Studio version and *Win64* if you build medusa in 64-bit.
+To run the Qt interface on Windows, you may have to add the folder *%QTDIR%\\bin* to your *%PATH%* and copy the folder *%QTDIR%\\plugins\\platforms*.
+By default, Medusa searches modules in the current folder, so you should run medusa executables from the folder where modules are located (e.g. *build/bin* on UNIX or *build\\bin\\{Debug,Release,...}* on Windows).
+
+Options
+-------
+
+* MEDUSA_BUILD_WITH_OGDF: clone OGDF project and build it, this library allows qMedusa to display graph
+
 
 Screenshots
 ===========
@@ -145,17 +157,24 @@ Screenshots
 Main interface
 --------------
 
-.. image:: https://raw.github.com/wisk/medusa/master/img/shots/main_interface.png
+.. image:: https://raw.github.com/wisk/medusa/dev/img/shots/main_interface.png
 
 Control flow graph
 ------------------
 
-.. image:: https://raw.github.com/wisk/medusa/master/img/shots/cfg.png
+.. image:: https://raw.github.com/wisk/medusa/dev/img/shots/cfg.png
 
 Interactivity
 -------------
 
-.. image:: https://raw.github.com/wisk/medusa/master/img/shots/interactivity.png
+.. image:: https://raw.github.com/wisk/medusa/dev/img/shots/interactivity.png
+
+.. image:: https://raw.github.com/wisk/medusa/dev/img/shots/label.png
+
+Binding
+-------
+
+.. image:: https://raw.github.com/wisk/medusa/dev/img/shots/python_binding.png
 
 
 Contacts
@@ -167,5 +186,15 @@ Contacts
 Acknowledgements
 ================
 
-My schoolmates: epieddy, François and FX.
-Yusuke Kamiyamane for his `icons <http://p.yusukekamiyamane.com>`_
+* My schoolmates: epieddy, flalande and FX.
+* My workmate: gg, w1gz.
+* Yusuke Kamiyamane for his `icons <http://p.yusukekamiyamane.com>`_
+* gunmetal313, saeschdivara, kangjoni76, KarlVogel for their contributions.
+
+.. |unix_build| image:: https://img.shields.io/travis/wisk/medusa/dev.svg?style=flat-square&label=unix%20build
+    :target: http://travis-ci.org/wisk/medusa
+    :alt: Build status of the dev branch on Mac/Linux
+
+.. |windows_build|  image:: https://img.shields.io/appveyor/ci/wisk/medusa.svg?style=flat-square&label=windows%20build
+    :target: https://ci.appveyor.com/project/wisk/medusa
+    :alt: Build status of the dev branch on Windows

@@ -1,21 +1,28 @@
-#ifndef __MEDUSA_BASIC_BLOCK_HPP__
-#define __MEDUSA_BASIC_BLOCK_HPP__
+#ifndef MEDUSA_BASIC_BLOCK_HPP
+#define MEDUSA_BASIC_BLOCK_HPP
 
 #include "medusa/namespace.hpp"
 #include "medusa/export.hpp"
 #include "medusa/types.hpp"
 #include "medusa/address.hpp"
+#include "medusa/document.hpp"
 
 MEDUSA_NAMESPACE_BEGIN
 
 class Medusa_EXPORT BasicBlockVertexProperties
 {
 public:
-  BasicBlockVertexProperties(void) {}
-  BasicBlockVertexProperties(Address::List const& rAddresses) : m_Addresses(rAddresses)
+  enum Type
   {
-    m_Addresses.sort();
-  }
+    kIsHead    = 1 << 0,
+    kCanReturn = 1 << 1,
+    kIsInLoop  = 1 << 2,
+  };
+
+  BasicBlockVertexProperties(void);
+  BasicBlockVertexProperties(Document const& rDoc, Address::List const& rAddresses);
+
+  BasicBlockVertexProperties operator=(BasicBlockVertexProperties const& rBscBlk);
 
   Address::List const& GetAddresses(void) const { return m_Addresses; }
   Address              GetFirstAddress(void) const;
@@ -27,7 +34,15 @@ public:
   bool                 GetPreviousAddress(Address const& rAddr, Address& rPrevAddr) const;
   bool                 GetNextAddress(Address const& rAddr, Address& rNextAddr) const;
 
+  bool                 IsHead(void) const;
+  bool                 CanReturn(void) const;
+  bool                 IsInLoop(void) const;
+
+private:
+  Document const* m_pDoc;
   Address::List m_Addresses;
+  mutable u32 m_Flags;
+  mutable u32 m_TestedFlags;
 };
 
 class Medusa_EXPORT BasicBlockEdgeProperties
@@ -39,7 +54,8 @@ public:
     Unconditional,
     True,
     False,
-    Next
+    Next,
+    Multiple,
   };
 
   BasicBlockEdgeProperties(Type Type = Unknown) : m_Type(Type) {}
@@ -51,4 +67,4 @@ private:
 
 MEDUSA_NAMESPACE_END
 
-#endif // !__MEDUSA_BASIC_BLOCK_HPP__
+#endif // !MEDUSA_BASIC_BLOCK_HPP

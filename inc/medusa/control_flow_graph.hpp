@@ -1,5 +1,5 @@
-#ifndef __MEDUSA_CONTROL_FLOW_GRAPH_HPP__
-#define __MEDUSA_CONTROL_FLOW_GRAPH_HPP__
+#ifndef MEDUSA_CONTROL_FLOW_GRAPH_HPP
+#define MEDUSA_CONTROL_FLOW_GRAPH_HPP
 
 #include "medusa/namespace.hpp"
 #include "medusa/export.hpp"
@@ -29,8 +29,8 @@ public:
   > Type;
 
   typedef boost::rectangle_topology<> TopologyType;
-  typedef TopologyType::point_type PointType;
-  typedef std::vector<PointType> PointVector;
+  typedef TopologyType::point_type PoBitVector;
+  typedef std::vector<PoBitVector> PointVector;
   typedef boost::iterator_property_map<
     PointVector::iterator, boost::property_map<Type, boost::vertex_index_t>::type
   > PositionMap;
@@ -41,7 +41,7 @@ public:
   typedef boost::graph_traits<Type>::vertex_iterator   BasicBlockIterator;
   typedef boost::graph_traits<Type>::edge_descriptor   EdgeIterator;
 
-  ControlFlowGraph(void);
+  ControlFlowGraph(Document const& rDoc);
 
   //! AddBasicBlockVertex adds a new basic block.
   void AddBasicBlockVertex(BasicBlockVertexProperties const& rVertex);
@@ -78,11 +78,12 @@ public:
 private:
   typedef std::map<Address, BasicBlockVertexDescriptor> VertexMap;
 
-  Type        m_Graph;
-  VertexMap   m_VertexMap;
-  PositionMap m_Layout;
+  Document const& m_rDoc;
+  Type            m_Graph;
+  VertexMap       m_VertexMap;
+  PositionMap     m_Layout;
 };
 
 MEDUSA_NAMESPACE_END
 
-#endif // !__MEDUSA_CONTROL_FLOW_GRAPH_HPP__
+#endif // !MEDUSA_CONTROL_FLOW_GRAPH_HPP

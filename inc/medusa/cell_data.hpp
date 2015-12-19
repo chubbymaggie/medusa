@@ -1,5 +1,5 @@
-#ifndef _MEDUSA_CELL_DATA_
-#define _MEDUSA_CELL_DATA_
+#ifndef MEDUSA_CELL_DATA_HPP
+#define MEDUSA_CELL_DATA_HPP
 
 #include <list>
 #include <string>
@@ -11,16 +11,12 @@
 #include "medusa/export.hpp"
 #include "medusa/types.hpp"
 
-#ifdef _MSC_VER
-# pragma warning(disable: 4251)
-#endif
-
 MEDUSA_NAMESPACE_BEGIN
 
 class Medusa_EXPORT CellData
 {
 public:
-  typedef std::shared_ptr<CellData> SPtr;
+  typedef std::shared_ptr<CellData> SPType;
 
   CellData(
       u8 Type = 0x0, u8 SubType = 0x0, u16 Size = 0x0,
@@ -67,4 +63,4 @@ protected:
 
 MEDUSA_NAMESPACE_END
 
-#endif // !_MEDUSA_CELL_DATA_
+#endif // !MEDUSA_CELL_DATA_HPP

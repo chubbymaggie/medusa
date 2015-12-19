@@ -1,5 +1,5 @@
-#ifndef __MEDUSA_CPU_HPP__
-#define __MEDUSA_CPU_HPP__
+#ifndef MEDUSA_CPU_HPP
+#define MEDUSA_CPU_HPP
 
 #include "medusa/namespace.hpp"
 #include "medusa/export.hpp"
@@ -8,7 +8,7 @@
 #include "medusa/document.hpp"
 #include "medusa/information.hpp"
 
-#include <set>
+#include <vector>
 #include <string>
 #include <unordered_map>
 #include <functional>
@@ -20,10 +20,28 @@ class Medusa_EXPORT CpuContext
 public:
   typedef std::list<u32> RegisterList;
 
+  enum AddressKind
+  {
+    AddressUnknown,
+    AddressExecution,
+  };
+
   CpuContext(CpuInformation const& rCpuInfo) : m_rCpuInfo(rCpuInfo) {}
 
-  virtual bool  ReadRegister (u32 Register, void*       pValue, u32 Size) const = 0;
-  virtual bool  WriteRegister(u32 Register, void const* pValue, u32 Size, bool SignExtend = false) = 0;
+  virtual bool ReadRegister(u32 Reg, void* pVal, u32 BitSize) const = 0;
+  template<typename _RegTy>
+  bool ReadRegister(u32 Reg, _RegTy& rVal) const
+  {
+    return ReadRegister(Reg, &rVal, sizeof(rVal) * 8);
+  }
+
+  virtual bool WriteRegister(u32 Reg, void const* pVal, u32 BitSize) = 0;
+  template<typename _RegTy>
+  bool WriteRegister(u32 Reg, _RegTy const& rVal)
+  {
+    return WriteRegister(Reg, &rVal, sizeof(rVal) * 8);
+  }
+
   virtual void* GetRegisterAddress(u32 Register) = 0;
   virtual void* GetContextAddress(void) = 0;
   virtual u16   GetRegisterOffset(u32 Register) = 0;
@@ -34,19 +52,32 @@ public:
   virtual bool AddMapping(Address const& rLogicalAddress, u64 LinearAddress);
   virtual bool RemoveMapping(Address const& rLogicalAddress);
 
+  virtual u8   GetMode(void) const = 0;
+  virtual void SetMode(u8 Mode) = 0;
+
+  virtual bool GetAddress(AddressKind AddrKind, Address& rAddr) const = 0;
+  virtual bool SetAddress(AddressKind AddrKind, Address const& rAddr) = 0;
+
+  virtual u32  GetException(void) const { return m_Exception; }
+  virtual void SetException(u32 Excpt) { m_Exception = Excpt; }
+
   virtual std::string ToString(void) const = 0;
 
   CpuInformation const& GetCpuInformation(void) const { return m_rCpuInfo; }
-
-  u8   GetMode(void) const { return m_Mode; }
-  void SetMode(u8 Mode)    { m_Mode = Mode; }
 
 protected:
   CpuInformation const& m_rCpuInfo;
   typedef std::unordered_map<Address, u64> AddressMap;
   AddressMap m_AddressMap;
-  u8 m_Mode;
+  u32 m_Exception;
+  mutable std::mutex m_CpuLock;
 };
+
+template<> Medusa_EXPORT bool CpuContext::ReadRegister<bool>(u32 Reg, bool& rVal) const;
+template<> Medusa_EXPORT bool CpuContext::WriteRegister<bool>(u32 Reg, bool const& rVal);
+
+template<> Medusa_EXPORT bool CpuContext::ReadRegister<BitVector>(u32 Reg, BitVector& rVal) const;
+template<> Medusa_EXPORT bool CpuContext::WriteRegister<BitVector>(u32 Reg, BitVector const& rVal);
 
 class Medusa_EXPORT MemoryContext
 {
@@ -54,88 +85,68 @@ public:
   struct MemoryChunk
   {
     u64   m_LinearAddress;
-    u32   m_Size;
-    void* m_Buffer;
+    u32   m_Flags;
+    MemoryBinaryStream::SPType m_spMemStrm;
 
-    MemoryChunk(u64 Address = 0, u32 Size = 0x0, void* Buffer = nullptr)
-      : m_LinearAddress(Address), m_Size(Size), m_Buffer(Buffer) {}
+    MemoryChunk(u64 LinAddr = 0x0, void* Buffer = nullptr, u32 Size = 0x0, u32 Flags = 0x0)
+      : m_LinearAddress(LinAddr), m_spMemStrm(std::make_shared<MemoryBinaryStream>(Buffer, Size)), m_Flags(Flags) {}
 
     bool operator<(MemoryChunk const& rMemChunk) const
     { return m_LinearAddress < rMemChunk.m_LinearAddress; }
+
+    bool operator==(MemoryChunk const& rMemChunk) const
+    { return m_LinearAddress == rMemChunk.m_LinearAddress; }
+
+    bool operator==(u64 LinAddr) const
+    { return m_LinearAddress == LinAddr; }
   };
 
   MemoryContext(CpuInformation const& rCpuInfo) : m_rCpuInfo(rCpuInfo) {}
+  ~MemoryContext(void);
 
-  virtual bool ReadMemory(u64 LinearAddress, void* pValue,       u32 ValueSize) const;
-  virtual bool WriteMemory(u64 LinearAddress, void const* pValue, u32 ValueSize, bool SignExtend = false);
-  virtual bool FindMemory(u64 LinearAddress, void*& prAddress, u32& rSize) const;
+  typedef std::function<void (MemoryChunk const& rMemChunk)> CallbackType;
+  void ForEachMemoryChunk(CallbackType Callback);
+  virtual bool ReadMemory(u64 LinAddr, void* pVal, u32 Size) const;
+  template<typename _MemTy>
+  bool ReadMemory(u64 LinAddr, _MemTy& rVal) const
+  {
+    return ReadMemory(LinAddr, &rVal, sizeof(rVal));
+  }
 
-  virtual bool AllocateMemory(u64 LinearAddress, u32 Size, void** ppRawMemory);
-  virtual bool FreeMemory    (u64 LinearAddress);
-  virtual bool MapDocument   (Document const& rDoc, CpuContext const* pCpuCtxt);
+  virtual bool WriteMemory(u64 LinAddr, void const* pVal, u32 Size);
+  template<typename _MemTy>
+  bool WriteMemory(u64 LinAddr, _MemTy const& rVal)
+  {
+    return WriteMemory(LinAddr, &rVal, sizeof(rVal));
+  }
+
+  virtual bool FindMemory(u64 LinAddr, BinaryStream::SPType& rspBinStrm, u32& rOffset, u32& rFlags) const;
+  virtual bool FindMemory(u64 LinAddr, void*& prAddr, u32& rOffset, u32& rSize, u32& rFlags) const;
+
+  virtual bool AllocateMemory(u64 LinAddr, u32 Size, u32 Flags, void** ppRawMemory);
+  virtual bool ProtectMemory(u64 LinAddr, u32 Flags); // TODO: add protection by pages
+  virtual bool FreeMemory(u64 LinAddr);
+  virtual bool MapDocument(Document const& rDoc, CpuContext const* pCpuCtxt);
 
   virtual std::string ToString(void) const;
 
 protected:
-  virtual bool FindMemoryChunk(u64 LinearAddress, MemoryChunk& rMemChnk) const;
+  virtual bool _FindMemoryChunk(u64 LinearAddress, MemoryChunk& rMemChnk) const;
 
   CpuInformation const& m_rCpuInfo;
 
-  typedef std::set<MemoryChunk> MemoryChunkSet;
-  MemoryChunkSet m_Memories;
+  typedef std::vector<MemoryChunk> MemoryChunksType;
+  MemoryChunksType m_Memories;
+  mutable std::recursive_mutex m_MemoryLock;
+
+private:
+  MemoryContext(MemoryContext const&);
+  MemoryContext const& operator=(MemoryContext const&);
 };
 
-class Medusa_EXPORT VariableContext
-{
-public:
-  enum Type
-  {
-    VarUnknown = 0,
-    Var1Bit    = 1,
-    Var8Bit    = 8,
-    Var16Bit   = 16,
-    Var32Bit   = 32,
-    Var64Bit   = 64,
-  };
-
-  virtual bool ReadVariable(std::string const& rVariableName, u64& rValue) const;
-  virtual bool WriteVariable(std::string const& rVariableName, u64 Value, bool SignExtend = false);
-  virtual void* GetVariable(std::string const& rVariableName);
-
-  virtual bool AllocateVariable(u32 Type, std::string const& rVariableName);
-  virtual bool FreeVariable(std::string const& rVariableName);
-
-  virtual std::string ToString(void) const;
-
-protected:
-  struct VariableInformation
-  {
-    u32 m_Type;
-    union
-    {
-      void* m_pValue;
-      u64 m_Value;
-    } u;
-
-    VariableInformation(bool Value)
-      : m_Type(Var1Bit) { u.m_Value = Value ? 1 : 0; }
-    VariableInformation(u8 Value)
-      : m_Type(Var8Bit) { u.m_Value = Value; }
-    VariableInformation(u16 Value)
-      : m_Type(Var16Bit) { u.m_Value = Value; }
-    VariableInformation(u32 Value)
-      : m_Type(Var32Bit) { u.m_Value = Value; }
-    VariableInformation(u64 Value)
-      : m_Type(Var64Bit) { u.m_Value = Value; }
-    VariableInformation(u32 Type = VarUnknown, void* pValue = nullptr)
-      : m_Type(Type) { u.m_pValue = pValue; }
-
-    u32 GetSizeInBit(void) const { return m_Type; }
-  };
-  typedef std::unordered_map<std::string, VariableInformation> VariableMap;
-  VariableMap m_Variables;
-};
+template<> Medusa_EXPORT bool MemoryContext::ReadMemory<BitVector>(u64 LinAddr, BitVector& rVal) const;
+template<> Medusa_EXPORT bool MemoryContext::WriteMemory<BitVector>(u64 LinAddr, BitVector const& rVal);
 
 MEDUSA_NAMESPACE_END
 
-#endif // !__MEDUSA_CPU_HPP__
+#endif // !MEDUSA_CPU_HPP

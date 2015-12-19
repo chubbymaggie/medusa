@@ -1,5 +1,5 @@
-#ifndef _PE_HEADER_
-#define _PE_HEADER_
+#ifndef LDR_PE_TYPE_HPP
+#define LDR_PE_TYPE_HPP
 
 #include <medusa/types.hpp>
 #include <medusa/endian.hpp>
@@ -35,6 +35,7 @@ MEDUSA_NAMESPACE_USE
 #define PE_FILE_MACHINE_AM33           0x01d3 /* Matsushita AM33 */
 #define PE_FILE_MACHINE_AMD64          0x8664 /* x64 */
 #define PE_FILE_MACHINE_ARM            0x01c0 /* ARM little endian */
+#define PE_FILE_MACHINE_ARMT           0x01c4 /* 32bit Mixed ARM and Thumb/Thumb 2  Little Endian */
 #define PE_FILE_MACHINE_EBC            0x0ebc /* EFI u8 code */
 #define PE_FILE_MACHINE_I386           0x014c /* Intel 386 or later processors and compatible processors */
 #define PE_FILE_MACHINE_IA64           0x0200 /* Intel Itanium processor family */
@@ -316,4 +317,4 @@ template<> struct PeTraits<64>
   typedef PeExportDirectory   ExportDirectory;
 };
 
-#endif
+#endif // !LDR_PE_TYPE_HPP

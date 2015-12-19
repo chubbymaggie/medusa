@@ -1,9 +1,10 @@
-#ifndef _X86_ARCHITECTURE_
-#define _X86_ARCHITECTURE_
+#ifndef ARCH_X86_HPP
+#define ARCH_X86_HPP
 
 #include <sstream>
 
 #include <medusa/types.hpp>
+#include <medusa/extend.hpp>
 #include <medusa/architecture.hpp>
 #include <medusa/binary_stream.hpp>
 #include <medusa/instruction.hpp>
@@ -34,24 +35,30 @@ private:
   class X86CpuInformation : public CpuInformation
   {
   public:
+    X86CpuInformation(void) : CpuInformation(MEDUSA_ARCH_TAG('x', '8', '6')) {}
     virtual char const* ConvertIdentifierToName(u32 Id) const;
     virtual u32 ConvertNameToIdentifier(std::string const& rName) const;
     virtual u32 GetRegisterByType(CpuInformation::Type RegType, u8 Mode) const;
     virtual u32 GetSizeOfRegisterInBit(u32 Id) const;
     virtual bool IsRegisterAliased(u32 Id0, u32 Id1) const;
+    virtual bool NormalizeRegister(u32 Id, u8 Mode, u32& rExtId, u64& rMask) const;
   } m_CpuInfo;
 
   class X86CpuContext : public CpuContext
   {
   public:
-    X86CpuContext(u8 Bits, CpuInformation const& rCpuInfo) : CpuContext(rCpuInfo), m_Bits(Bits) { memset(&m_Context, 0x0, sizeof(m_Context)); }
-    virtual bool ReadRegister (u32 Register, void*       pValue, u32 Size) const;
-    virtual bool WriteRegister(u32 Register, void const* pValue, u32 Size, bool SignExtend = false);
+    X86CpuContext(u8 Bits, CpuInformation const& rCpuInfo);
+    virtual bool ReadRegister (u32 Reg, void*       pVal, u32 BitSize) const;
+    virtual bool WriteRegister(u32 Reg, void const* pVal, u32 BitSize);
     virtual void* GetRegisterAddress(u32 Register);
     virtual void* GetContextAddress(void) { return &m_Context; }
     virtual u16 GetRegisterOffset(u32 Register);
     virtual void GetRegisters(RegisterList& RegList) const;
     virtual bool Translate(Address const& rLogicalAddress, u64& rLinearAddress) const;
+    virtual u8 GetMode(void) const;
+    virtual void SetMode(u8 Mode);
+    virtual bool GetAddress(AddressKind AddrKind, Address& rAddr) const;
+    virtual bool SetAddress(AddressKind AddrKind, Address const& rAddr);
     virtual std::string ToString(void) const;
 
   private:
@@ -67,7 +74,9 @@ private:
     {
       X86Register a, b, c, d, si, di, bp, sp, ip, r8, r9, r10, r11, r12, r13, r14, r15;
       u16 cs, ds, es, ss, fs, gs;
-      u32 flags;
+      // http://en.wikipedia.org/wiki/FLAGS_register
+      bool CF, PF, AF, ZF, SF, TF, IF, DF, OF, IOPL, NT, RF, VM, AC, VIF, VIP, ID;
+      u128 xyzmm[32];
     } m_Context;
 
     u8 m_Bits;
@@ -97,56 +106,129 @@ public:
     return 0;
   }
 
-  virtual bool FormatOperand(
-    Document      const& rDoc,
-    Address       const& rAddress,
-    Instruction   const& rInstruction,
-    Operand       const& rOperand,
-    u8                   OperandNo,
-    PrintData          & rPrintData) const;
-
   virtual bool FormatInstruction(
     Document      const& rDoc,
     Address       const& rAddr,
     Instruction   const& rInsn,
     PrintData          & rPrintData) const;
 
-  virtual CpuInformation const* GetCpuInformation(void) const { return &m_CpuInfo; }
-  virtual CpuContext*           MakeCpuContext(void) const { return new X86CpuContext(0, m_CpuInfo); }
-  virtual MemoryContext*        MakeMemoryContext(void) const { return new MemoryContext(m_CpuInfo); }
+  virtual CpuInformation    const* GetCpuInformation(void) const { return &m_CpuInfo; }
+  virtual CallingConvention const* GetCallingConvention(std::string const& rCallConvName, u8 Mode) const;
+  virtual std::vector<std::string> GetCallingConventionNames(void) const;
 
-  virtual Expression*           UpdateFlags(Instruction& rInsn, Expression* pResultExpr);
-  virtual OperationExpression*  SetFlags(Instruction& rInsn, u32 Flags);
-  virtual OperationExpression*  ResetFlags(Instruction& rInsn, u32 Flags);
-  virtual ConditionExpression*  TestFlags(Instruction& rInsn, u32 Flags);
-  virtual ConditionExpression*  TestNotFlags(Instruction& rInsn, u32 Flags);
-  virtual OperationExpression*  ExtractFlag(Instruction& rInsn, u32 Flag);
+  virtual CpuContext*    MakeCpuContext(void)    const { return new X86CpuContext(0, m_CpuInfo); }
+  virtual MemoryContext* MakeMemoryContext(void) const { return new MemoryContext(m_CpuInfo); }
+
+  virtual bool HandleExpression(Expression::LSPType & rExprs, std::string const& rName, Instruction& rInsn, Expression::SPType spResExpr);
+  virtual bool EmitSetExecutionAddress(Expression::VSPType& rExprs, Address const& rAddr, u8 Mode);
 
 private:
 #include "x86_operand.ipp"
 #include "x86_opcode.ipp"
 
-  u32 ConvertFlagIdToMask(u32 Flags)
-  {
-    u32 FlagsMask = 0;
-#define CONVERT_FLAG_ID_TO_MASK(fl) if (Flags & X86_Fl##fl) FlagsMask |= (1 << X86_##fl##Bit)
-    CONVERT_FLAG_ID_TO_MASK(Cf);
-    CONVERT_FLAG_ID_TO_MASK(Pf);
-    CONVERT_FLAG_ID_TO_MASK(Af);
-    CONVERT_FLAG_ID_TO_MASK(Zf);
-    CONVERT_FLAG_ID_TO_MASK(Sf);
-    CONVERT_FLAG_ID_TO_MASK(Tf);
-    CONVERT_FLAG_ID_TO_MASK(If);
-    CONVERT_FLAG_ID_TO_MASK(Df);
-    CONVERT_FLAG_ID_TO_MASK(Of);
-#undef CONVERT_FLAG_ID_TO_MASK
-    return FlagsMask;
-  }
+  Expression::SPType __Decode_Ap(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_By(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_Cy(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_Dy(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+
+  Expression::SPType __Decode_Eb(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_Ed(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_Edb(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_Eq(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_Ev(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_Ew(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_Ey(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_Eyb(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_Eyw(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+
+  Expression::SPType __Decode_Gb(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_Gw(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_Gd(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_Gq(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_Gv(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_Gy(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+
+  Expression::SPType __Decode_Ho(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_Hx(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_Hy(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+
+  Expression::SPType __Decode_Ibs(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+
+  Expression::SPType __Decode_Jb(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_Jz(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+
+  Expression::SPType __Decode_Lx(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+
+  Expression::SPType __Decode_M(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_Ma(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_Md(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_Mo(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_Mod(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_Moq(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_Mp(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_Mq(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_Mqo(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_Mv(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_Mw(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_Mx(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_My(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+
+  Expression::SPType __Decode_Nq(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+
+  Expression::SPType __Decode_Ob(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_Ov(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+
+  Expression::SPType __Decode_Pq(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+
+  Expression::SPType __Decode_Qd(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_Qq(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+
+  Expression::SPType __Decode_Rv(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_Ry(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+
+  Expression::SPType __Decode_Sw(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+
+  Expression::SPType __Decode_Ty(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+
+  Expression::SPType __Decode_Uo(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_Uod(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_Uoq(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_Uq(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_Ux(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+
+  Expression::SPType __Decode_Vo(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_Vod(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_Voq(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_Vx(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_Vy(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+
+  Expression::SPType __Decode_Wd(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_Wo(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_Wob(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_Wod(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_Woo(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_Woq(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_Woqo(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_Wow(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_Wq(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_Wx(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_Wy(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+
+  Expression::SPType __Decode_m16int(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_m32fp(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_m32int(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_m64fp(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_m64int(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_m80bcd(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_m80dec(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_m80fp(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+
+  Expression::SPType __Decode_b(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_w(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
+  Expression::SPType __Decode_x(BinaryStream const& rBinStrm, TOffset Offset, Instruction& rInsn, u8 Mode);
 
 private:
   static const char * m_Mnemonic[];
-
-  void                ApplySegmentOverridePrefix(Instruction& rInsn, Operand* pOprd);
 };
 
-#endif // !_X86_ARCHITECTURE_
+#endif // !ARCH_X86_HPP

@@ -1,199 +1,210 @@
 #include "medusa/instruction.hpp"
+#include "medusa/expression_visitor.hpp"
 
 MEDUSA_NAMESPACE_BEGIN
 
+Instruction::Instruction(char const* pName, u32 Opcode, u16 Length)
+  : Cell(Cell::InstructionType, NoneType)
+  , m_pName(pName)
+  , m_Opcd(Opcode)
+  , m_Prefix()
+  , m_TestedFlags()
+  , m_UpdatedFlags()
+  , m_ClearedFlags()
+  , m_FixedFlags()
+  , m_Expressions()
+{
+  m_spDna->Length() = Length;
+}
+
+Instruction::Instruction(CellData::SPType spDna)
+  : Cell(spDna)
+  , m_pName(nullptr)
+  , m_Opcd(0x0)
+  , m_Prefix()
+  , m_TestedFlags()
+  , m_UpdatedFlags()
+  , m_ClearedFlags()
+  , m_FixedFlags()
+  , m_Expressions()
+{}
+
 Instruction::~Instruction(void)
 {
-  for (Expression* pExpr : m_Expressions)
-    delete pExpr;
-  m_Expressions.clear();
 }
 
-void Instruction::SetSemantic(Expression::List const& rExprList)
+std::string Instruction::ToString(void) const
 {
-  for (Expression* pExpr : m_Expressions)
-    delete pExpr;
-  m_Expressions.clear();
-  m_Expressions = rExprList;
+  std::string Res = (boost::format("mnem: %s(%08x), length: %d, prefix: %08x, oprd: %d")
+    % m_pName % m_Opcd % m_spDna->GetLength() % m_Prefix % m_Operands.size()).str();
+  if (m_Operands.empty())
+    return Res;
+  Res += "\n";
+  for (auto const spOprd : m_Operands)
+  {
+    Res += spOprd->ToString();
+    Res += "\n";
+  }
+  return Res;
 }
 
-void Instruction::SetSemantic(Expression* pExpr)
+char const* Instruction::GetName(void) const
 {
-  for (Expression* pExpr : m_Expressions)
-    delete pExpr;
-  m_Expressions.clear();
-  m_Expressions.push_back(pExpr);
+  return m_pName;
 }
 
-void Instruction::AddPreSemantic(Expression* pExpr)
+u32 Instruction::GetOpcode(void) const
 {
-  m_Expressions.push_front(pExpr);
+  return m_Opcd;
 }
 
-void Instruction::AddPostSemantic(Expression* pExpr)
+u32 Instruction::GetPrefix(void) const
 {
-  m_Expressions.push_back(pExpr);
+  return m_Prefix;
 }
 
-u8 Instruction::GetOperandOffset(u8 Oprd) const
+u32 Instruction::GetTestedFlags(void) const
 {
-  if (Oprd < OPERAND_NO)
-    return m_Oprd[Oprd].GetOffset();
-  return 0;
+  return m_TestedFlags;
 }
 
-//TODO: Need more work
-bool Instruction::GetOperandReference(Document const& rDoc, u8 Oprd, Address const& rAddrSrc, Address& rAddrDst) const
+u32 Instruction::GetUpdatedFlags(void) const
 {
-  medusa::Operand const* pOprd = Operand(Oprd);
-  TOffset Offset = 0x0;
+  return m_UpdatedFlags;
+}
 
-  rAddrDst = rAddrSrc;
+u32 Instruction::GetClearedFlags(void) const
+{
+  return m_ClearedFlags;
+}
 
-  // XXX: Should never happen
-  if (pOprd == nullptr) return false;
+u32 Instruction::GetFixedFlags(void) const
+{
+  return m_FixedFlags;
+}
 
-  if (pOprd->GetType() & O_NO_REF)
+Expression::LSPType  const& Instruction::GetSemantic(void) const
+{
+  return m_Expressions;
+}
+
+void Instruction::AddOperand(Expression::SPType spOprdExpr)
+{
+  m_Operands.push_back(spOprdExpr);
+}
+
+Expression::SPType Instruction::GetOperand(u8 OprdNo) const
+{
+  return OprdNo < m_Operands.size() ? m_Operands[OprdNo] : nullptr;
+}
+
+bool Instruction::GetOperandReference(Document const& rDoc, u8 OprdNo, Address const& rCurAddr, Address& rDstAddr, bool EvalMemRef) const
+{
+  auto spOprd = GetOperand(OprdNo);
+  if (spOprd == nullptr)
     return false;
 
-  if (pOprd->GetType() & O_REL)
-  {
-    switch (pOprd->GetType() & DS_MASK)
-    {
-      case DS_8BIT:   Offset = static_cast<s8> (pOprd->GetValue()) + GetLength(); break;
-      case DS_16BIT:  Offset = static_cast<s16>(pOprd->GetValue()) + GetLength(); break;
-      case DS_32BIT:  Offset = static_cast<s32>(pOprd->GetValue()) + GetLength(); break;
-      case DS_64BIT:  Offset = static_cast<s64>(pOprd->GetValue()) + GetLength(); break;
-      default:        Offset = pOprd->GetValue() + GetLength();
-    }
+  EvaluateVisitor EvalVst(rDoc, rCurAddr, GetMode(), EvalMemRef);
+  auto spResExpr = spOprd->Visit(&EvalVst);
+  if (spResExpr == nullptr)
+    return false;
+  rDstAddr = rCurAddr;
 
-    rAddrDst = rAddrSrc + Offset;
+  auto spMemExpr = expr_cast<MemoryExpression>(spResExpr);
+  if (spMemExpr != nullptr)
+  {
+    auto spBaseExpr = expr_cast<BitVectorExpression>(spMemExpr->GetBaseExpression());
+    if (spBaseExpr != nullptr)
+      rDstAddr.SetBase(spBaseExpr->GetInt().ConvertTo<TBase>());
+
+    auto spOffExpr = expr_cast<BitVectorExpression>(spMemExpr->GetOffsetExpression());
+    if (spOffExpr == nullptr)
+      return false;
+    rDstAddr.SetOffset(spOffExpr->GetInt().ConvertTo<TOffset>());
     return true;
   }
 
-  else if ((pOprd->GetType() & O_MEM))
+  // HACK: We ignore 8-bit const since it's probably not a reference
+  auto spConstExpr = expr_cast<BitVectorExpression>(spResExpr);
+  if (spConstExpr != nullptr && spConstExpr->GetBitSize() > 8)
   {
-    if (pOprd->GetType() & O_REG_PC_REL)
-      Offset += rAddrSrc.GetOffset();
-
-    switch (pOprd->GetType() & DS_MASK)
-    {
-      case DS_8BIT:   Offset += static_cast<s8> (pOprd->GetValue()); break;
-      case DS_16BIT:  Offset += static_cast<s16>(pOprd->GetValue()); break;
-      case DS_32BIT:  Offset += static_cast<s32>(pOprd->GetValue()); break;
-      case DS_64BIT:  Offset += static_cast<s64>(pOprd->GetValue()); break;
-      default:        Offset += pOprd->GetValue();
-    }
-
-    rAddrDst.SetOffset(Offset);
-    return true;
-  }
-
-  else if ((pOprd->GetType() & O_ABS) || (pOprd->GetType() & O_IMM) || (pOprd->GetType() & O_DISP))
-  {
-    switch (pOprd->GetType() & DS_MASK)
-    {
-      case DS_8BIT:   rAddrDst.SetOffset(static_cast<s8> (pOprd->GetValue())); break;
-      case DS_16BIT:  rAddrDst.SetOffset(static_cast<s16>(pOprd->GetValue())); break;
-      case DS_32BIT:  rAddrDst.SetOffset(static_cast<s32>(pOprd->GetValue())); break;
-      case DS_64BIT:  rAddrDst.SetOffset(static_cast<s64>(pOprd->GetValue())); break;
-      default:        rAddrDst.SetOffset(pOprd->GetValue());
-    }
-
+    rDstAddr.SetOffset(spConstExpr->GetInt().ConvertTo<TOffset>());
     return true;
   }
 
   return false;
 }
 
-u8 Instruction::GetOperandReferenceLength(u8 Oprd) const
+u8 Instruction::GetNumberOfOperand(void) const
 {
-  medusa::Operand const* pOprd = Operand(Oprd);
-
-  if (pOprd == nullptr) return 0;
-
-  switch (pOprd->GetType() & MS_MASK)
-  {
-  case MS_8BIT:   return  8;
-  case MS_16BIT:  return 16;
-  case MS_32BIT:  return 32;
-  case MS_64BIT:  return 64;
-  default:        return  0;
-  }
+  return static_cast<u8>(m_Operands.size());
 }
 
-bool Instruction::GetOperandAddress(u8 Oprd, Address const& rAddrSrc, Address& rAddrDst) const
+void Instruction::ForEachOperand(Instruction::OperandCallback OprdCb) const
 {
-  u8 OpOff = GetOperandOffset(Oprd);
-  if (OpOff == 0)
-    return false;
-
-  rAddrDst = rAddrSrc + OpOff;
-  return true;
+  for (auto const& rspOprdExpr : m_Operands)
+    OprdCb(rspOprdExpr);
 }
 
-// UNTESTED
-bool Instruction::GetIndirectReferences(Document const& rDoc, u8 Oprd, Address::List& rRefAddr) const
+void Instruction::SetName(char const* pName)
 {
-  medusa::Operand const* pOprd = Operand(Oprd);
-  TOffset Offset = 0x0;
+  m_pName = pName;
+}
 
-  Address RefAddr;
+void Instruction::SetOpcode(u32 Opcd)
+{
+  m_Opcd = Opcd;
+}
 
-  // XXX: Should never happen
-  if (pOprd == nullptr) return false;
+void Instruction::SetTestedFlags(u32 Flags)
+{
+  m_TestedFlags = Flags;
+}
 
-  if (pOprd->GetType() & (O_NO_REF | O_REG_PC_REL))
-    return false;
+void Instruction::SetUpdatedFlags(u32 Flags)
+{
+  m_UpdatedFlags = Flags;
+}
 
-  if ((pOprd->GetType() & (O_MEM | O_DISP)) != (O_MEM | O_DISP))
-    return false;
+void Instruction::SetClearedFlags(u32 Flags)
+{
+  m_ClearedFlags = Flags;
+}
 
-  switch (pOprd->GetType() & DS_MASK)
-  {
-  case DS_8BIT:   RefAddr.SetOffset(static_cast<s8> (pOprd->GetValue())); break;
-  case DS_16BIT:  RefAddr.SetOffset(static_cast<s16>(pOprd->GetValue())); break;
-  case DS_32BIT:  RefAddr.SetOffset(static_cast<s32>(pOprd->GetValue())); break;
-  case DS_64BIT:  RefAddr.SetOffset(static_cast<s64>(pOprd->GetValue())); break;
-  default:        RefAddr.SetOffset(pOprd->GetValue());
-  }
+void Instruction::SetFixedFlags(u32 Flags)
+{
+  m_FixedFlags = Flags;
+}
 
+void Instruction::SetSemantic(Expression::LSPType  const& rExprList)
+{
+  m_Expressions = rExprList;
+}
 
-  TOffset RawOffset;
-  MemoryArea const* pMemArea = rDoc.GetMemoryArea(RefAddr);
-  if (pMemArea == nullptr)
-    return false;
-  if (!pMemArea->ConvertOffsetToFileOffset(Offset, RawOffset))
-    return false;
+void Instruction::SetSemantic(Expression::SPType spExpr)
+{
+  m_Expressions.clear();
+  m_Expressions.push_back(spExpr);
+}
 
-  BinaryStream const& rBinStrm = rDoc.GetBinaryStream();
+void Instruction::AddPreSemantic(Expression::SPType spExpr)
+{
+  m_Expressions.push_front(spExpr);
+}
 
-  u8 ReadSize = GetOperandReferenceLength(Oprd);
-  if (ReadSize == 0)
-    return false;
+void Instruction::AddPostSemantic(Expression::SPType spExpr)
+{
+  m_Expressions.push_back(spExpr);
+}
 
-  u64 ReadOffset;
-  while (true)
-  {
-    ReadOffset = 0x0;
-    try
-    {
-      rBinStrm.Read(RawOffset, ReadOffset);
-      ReadOffset &= ((1 << ReadSize) - 1);
-    }
-    catch(Exception&) { return rRefAddr.empty() ? false : true; }
+u16& Instruction::Length(void)
+{
+  return m_spDna->Length();
+}
 
-    //if (
-    //  rDoc.ContainsCode(Address(0, ReadOffset)) == false &&
-    //  rDoc.ContainsData(Address(0, ReadOffset)) == false)
-    //  break;
-
-    rRefAddr.push_back(Address(0, ReadOffset));
-
-    RawOffset += (ReadSize / 8);
-  }
-
-  return rRefAddr.empty() ? false : true;
+u32& Instruction::Prefix(void)
+{
+  return m_Prefix;
 }
 
 MEDUSA_NAMESPACE_END

@@ -3,17 +3,21 @@ set(SRCROOT ${CMAKE_SOURCE_DIR}/src/core)
 
 # all source files
 set(SRC
+  ${CMAKE_BINARY_DIR}/inc/medusa/version.hpp
+
   ${INCROOT}/address.hpp
   ${INCROOT}/analyzer.hpp
   ${INCROOT}/architecture.hpp
   ${INCROOT}/array.hpp
   ${INCROOT}/basic_block.hpp
   ${INCROOT}/binary_stream.hpp
+  ${INCROOT}/binding.hpp
   ${INCROOT}/bits.hpp
   ${INCROOT}/cell.hpp
   ${INCROOT}/cell_action.hpp
   ${INCROOT}/cell_data.hpp
   ${INCROOT}/cell_text.hpp
+  ${INCROOT}/calling_convention.hpp
   ${INCROOT}/character.hpp
   ${INCROOT}/configuration.hpp
   ${INCROOT}/control_flow_graph.hpp
@@ -30,6 +34,9 @@ set(SRC
   ${INCROOT}/execution.hpp
   ${INCROOT}/export.hpp
   ${INCROOT}/expression.hpp
+  ${INCROOT}/expression_filter.hpp
+  ${INCROOT}/expression_simplifier.hpp
+  ${INCROOT}/expression_visitor.hpp
   ${INCROOT}/extend.hpp
   ${INCROOT}/function.hpp
   ${INCROOT}/information.hpp
@@ -42,11 +49,11 @@ set(SRC
   ${INCROOT}/module.hpp
   ${INCROOT}/multicell.hpp
   ${INCROOT}/namespace.hpp
-  ${INCROOT}/operand.hpp
   ${INCROOT}/os.hpp
   ${INCROOT}/plugin.hpp
   ${INCROOT}/string.hpp
   ${INCROOT}/structure.hpp
+  ${INCROOT}/symbolic.hpp
   ${INCROOT}/task.hpp
   ${INCROOT}/types.hpp
   ${INCROOT}/user_configuration.hpp
@@ -57,9 +64,16 @@ set(SRC
 
   ${SRCROOT}/address.cpp
   ${SRCROOT}/analyzer.cpp
+  ${SRCROOT}/analyzer_disassemble.cpp
+  ${SRCROOT}/analyzer_instruction.cpp
+  ${SRCROOT}/analyzer_basic_block.cpp
+  ${SRCROOT}/analyzer_function.cpp
+  ${SRCROOT}/analyzer_string.cpp
   ${SRCROOT}/architecture.cpp
   ${SRCROOT}/array.cpp
   ${SRCROOT}/basic_block.cpp
+  ${SRCROOT}/binding.cpp
+  ${SRCROOT}/calling_convention.cpp
   ${SRCROOT}/cell.cpp
   ${SRCROOT}/cell_action.cpp
   ${SRCROOT}/cell_data.cpp
@@ -78,21 +92,24 @@ set(SRC
   ${SRCROOT}/exception.cpp
   ${SRCROOT}/execution.cpp
   ${SRCROOT}/expression.cpp
+  ${SRCROOT}/expression_filter.cpp
+  ${SRCROOT}/expression_simplifier.cpp
+  ${SRCROOT}/expression_visitor.cpp
   ${SRCROOT}/function.cpp
   ${SRCROOT}/instruction.cpp
   ${SRCROOT}/information.cpp
   ${SRCROOT}/label.cpp
   ${SRCROOT}/log.cpp
-  ${SRCROOT}/main.cpp
   ${SRCROOT}/medusa.cpp
   ${SRCROOT}/memory_area.cpp
   ${SRCROOT}/module.cpp
   ${SRCROOT}/multicell.cpp
-  ${SRCROOT}/operand.cpp
   ${SRCROOT}/os.cpp
   ${SRCROOT}/string.cpp
   ${SRCROOT}/structure.cpp
+  ${SRCROOT}/symbolic.cpp
   ${SRCROOT}/task.cpp
+  ${SRCROOT}/types.cpp
   ${SRCROOT}/user_configuration.cpp
   ${SRCROOT}/util.cpp
   ${SRCROOT}/value.cpp

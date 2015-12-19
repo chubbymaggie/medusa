@@ -36,7 +36,7 @@ bool ElfLoader::IsCompatible(BinaryStream const& rBinStrm)
   return true;
 }
 
-void ElfLoader::Map(Document& rDoc, Architecture::VectorSharedPtr const& rArchs)
+void ElfLoader::Map(Document& rDoc, Architecture::VSPType const& rArchs)
 {
   switch (m_Ident[EI_CLASS])
   {
@@ -46,7 +46,7 @@ void ElfLoader::Map(Document& rDoc, Architecture::VectorSharedPtr const& rArchs)
   }
 }
 
-void ElfLoader::FilterAndConfigureArchitectures(Architecture::VectorSharedPtr& rArchs) const
+void ElfLoader::FilterAndConfigureArchitectures(Architecture::VSPType& rArchs) const
 {
   Tag ArchTag;
   u8  ArchMode;
@@ -54,29 +54,29 @@ void ElfLoader::FilterAndConfigureArchitectures(Architecture::VectorSharedPtr& r
   if (!FindArchitectureTagAndModeByMachine(rArchs, ArchTag, ArchMode))
     return;
 
-  rArchs.erase(std::remove_if(std::begin(rArchs), std::end(rArchs), [&ArchTag](Architecture::SharedPtr spArch)
+  rArchs.erase(std::remove_if(std::begin(rArchs), std::end(rArchs), [&ArchTag](Architecture::SPType spArch)
   { return ArchTag != spArch->GetTag();}), std::end(rArchs));
 }
 
 bool ElfLoader::FindArchitectureTagAndModeByMachine(
-    Architecture::VectorSharedPtr const& rArchs,
+    Architecture::VSPType const& rArchs,
     Tag& rArchTag,
     u8&  rArchMode
     ) const
 {
   std::string ArchName = "";
-  std::string ModeName = "";
+  std::string ArchMode = "";
 
   switch (m_Machine)
   {
   case EM_386:
     ArchName = "Intel x86";
-    ModeName = "32-bit";
+    ArchMode = "32-bit";
     break;
 
   case EM_X86_64:
     ArchName = "Intel x86";
-    ModeName = "64-bit";
+    ArchMode = "64-bit";
     break;
 
   case EM_ARM:                 ArchName = "ARM";             break;
@@ -84,12 +84,12 @@ bool ElfLoader::FindArchitectureTagAndModeByMachine(
   default:                                                   break;
   }
 
-  for (auto itArch = std::begin(rArchs), itEnd = std::end(rArchs); itArch != itEnd; ++itArch)
+  for (auto& rArch : rArchs)
   {
-    if (ArchName == (*itArch)->GetName())
+    if (ArchName == rArch->GetName())
     {
-      rArchTag  = (*itArch)->GetTag();
-      rArchMode = (*itArch)->GetModeByName(ModeName);
+      rArchTag  = rArch->GetTag();
+      rArchMode = rArch->GetModeByName(ArchMode);
       return true;
     }
   }

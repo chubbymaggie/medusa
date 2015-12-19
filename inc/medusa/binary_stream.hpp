@@ -1,9 +1,10 @@
-#ifndef _MEDUSA_BINARY_STREAM_
-#define _MEDUSA_BINARY_STREAM_
+#ifndef MEDUSA_BINARY_STREAM_HPP
+#define MEDUSA_BINARY_STREAM_HPP
 
 #include "medusa/namespace.hpp"
 #include "medusa/types.hpp"
 #include "medusa/endian.hpp"
+#include "medusa/extend.hpp"
 #include "medusa/exception.hpp"
 #include "medusa/export.hpp"
 #include "medusa/util.hpp"
@@ -14,10 +15,7 @@
 
 #include <boost/type_traits.hpp>
 #include <boost/filesystem/path.hpp>
-
-#ifdef _MSC_VER
-# pragma warning(disable: 4251)
-#endif
+#include <boost/filesystem/operations.hpp>
 
 MEDUSA_NAMESPACE_BEGIN
 
@@ -25,16 +23,49 @@ MEDUSA_NAMESPACE_BEGIN
 class Medusa_EXPORT BinaryStream
 {
 public:
-  typedef std::shared_ptr<BinaryStream> SharedPtr;
+  typedef std::shared_ptr<BinaryStream> SPType;
 
   BinaryStream(void);
   virtual ~BinaryStream(void);
 
+  BinaryStream(BinaryStream const&) = delete;
+  BinaryStream& operator=(BinaryStream const&) = delete;
+
+  BinaryStream(BinaryStream&& mBinStrm)
+  {
+    *this = std::move(mBinStrm);
+  }
+
+  BinaryStream& operator=(BinaryStream&& mBinStrm)
+  {
+    if (this != &mBinStrm)
+    {
+      m_Path = std::move(mBinStrm.m_Path);
+
+      m_pBuffer = mBinStrm.m_pBuffer;
+      mBinStrm.m_pBuffer = nullptr;
+
+      m_Size = mBinStrm.m_Size;
+      mBinStrm.m_Size = 0x0;
+
+      m_Endianness = mBinStrm.m_Endianness;
+      mBinStrm.m_Endianness = EndianUnknown;
+
+      m_Sha1 = std::move(mBinStrm.m_Sha1);
+    }
+    return *this;
+  }
+
+  virtual void Close(void) = 0;
+
+  //! This method returns a path for the binary stream (for memory binary stream it redirects to a tmp file)
+  Path GetPath(void) const { return m_Path; }
+
   //! This method returns the current endianness.
-  EEndianness GetEndianness(void) const             { return m_Endianness;        }
+  EEndianness GetEndianness(void) const { return m_Endianness; }
 
   //! This method sets the desired endianness.
-  void        SetEndianness(EEndianness Endianness) { m_Endianness = Endianness;  }
+  void SetEndianness(EEndianness Endianness) { m_Endianness = Endianness;  }
 
   //! This method reads according to the size of rData and performs a swap if needed.
   bool Read(TOffset Position, s8  &rData) const
@@ -67,6 +98,32 @@ public:
   //! This method reads according to the size of rData and performs a swap if needed.
   bool Read(TOffset Position, u64 &rData) const
   { return ReadGeneric(Position, rData); }
+
+  template<typename _Tp>
+  bool Read(TOffset Position, u64& rData, bool SignExtend) const
+  {
+    _Tp Val;
+
+    if (!Read(Position, Val))
+      return false;
+
+    if (SignExtend)
+      rData = medusa::SignExtend<s64, sizeof(Val) * 8>(Val);
+
+    return true;
+  }
+
+  bool Read(TOffset Position, u64& rData, u32 Size, bool SignExtend) const
+  {
+    switch (Size)
+    {
+    case sizeof(u8):  return Read<u8> (Position, rData, SignExtend);
+    case sizeof(u16): return Read<u16>(Position, rData, SignExtend);
+    case sizeof(u32): return Read<u32>(Position, rData, SignExtend);
+    case sizeof(u64): return Read<u64>(Position, rData, SignExtend);
+    default:          return false;
+    }
+  }
 
   template<typename T, size_t N>
   bool Read(TOffset Position, T (&rData)[N]) const
@@ -172,11 +229,25 @@ public:
       return false;
 
     u8* pDataPosition = reinterpret_cast<u8*>(m_pBuffer) + Position;
-    memcpy(pDataPosition, pData, Length);
+    ::memcpy(pDataPosition, pData, Length);
+    return true;
+  }
+
+  bool Write(TOffset Position, int Val, size_t Length)
+  {
+    if (m_pBuffer == nullptr)
+      return false;
+
+    if (Position + Length < Position || Position + Length > m_Size)
+      return false;
+
+    u8* pDataPosition = reinterpret_cast<u8*>(m_pBuffer)+Position;
+    ::memset(pDataPosition, Val, Length);
     return true;
   }
 
   u32         GetSize(void)   const { return m_Size;    }
+  void*       GetBuffer(void)       { return m_pBuffer; }
   void const* GetBuffer(void) const { return m_pBuffer; }
 
   std::string const &GetSha1(void) const
@@ -222,40 +293,90 @@ protected:
     return true;
   }
 
+  Path                m_Path;
   void*               m_pBuffer;
   u32                 m_Size;
   EEndianness         m_Endianness;
   mutable std::string m_Sha1;
-
-private:
-  BinaryStream(BinaryStream const&);
-  BinaryStream& operator=(BinaryStream const&);
 };
 
 //! FileBinaryStream is a generic class for file access.
 class Medusa_EXPORT FileBinaryStream : public BinaryStream
 {
 public:
-  FileBinaryStream(void);
-  FileBinaryStream(boost::filesystem::path const& rFilePath);
+  FileBinaryStream(Path const& rFilePath = Path());
   virtual ~FileBinaryStream(void);
+
+  FileBinaryStream(FileBinaryStream&& mBinStrm)
+  {
+    *this = std::move(mBinStrm);
+  }
+
+  FileBinaryStream& operator=(FileBinaryStream&& mBinStrm)
+  {
+    if (this != &mBinStrm)
+    {
+      m_Path = std::move(mBinStrm.m_Path);
+
+      m_pBuffer = mBinStrm.m_pBuffer;
+      mBinStrm.m_pBuffer = nullptr;
+
+      m_Size = mBinStrm.m_Size;
+      mBinStrm.m_Size = 0x0;
+
+      m_Endianness = mBinStrm.m_Endianness;
+      mBinStrm.m_Endianness = EndianUnknown;
+
+      m_Sha1 = std::move(mBinStrm.m_Sha1);
+
+      m_FileHandle = mBinStrm.m_FileHandle;
+      mBinStrm.m_FileHandle = INVALID_FILE_VALUE;
+
+      m_MapHandle = mBinStrm.m_MapHandle;
+      mBinStrm.m_MapHandle = INVALID_MAP_VALUE;
+    }
+    return *this;
+  }
 
   void Open(boost::filesystem::path const& rFilePath);
   void Close(void);
 
 protected:
-  boost::filesystem::path m_FileName;
   TFileHandle             m_FileHandle;
   TMapHandle              m_MapHandle;
 };
 
-//! MemoryBinaryStream is similar to BinaryStream.
+//! MemoryBinaryStream handle memory from a raw pointer but its duplicated first.
 class Medusa_EXPORT MemoryBinaryStream : public BinaryStream
 {
 public:
-  MemoryBinaryStream(void);
-  MemoryBinaryStream(void const* pMem, u32 MemSize);
+  MemoryBinaryStream(void const* pMem = nullptr, u32 MemSize = 0);
   virtual ~MemoryBinaryStream(void);
+
+  MemoryBinaryStream(MemoryBinaryStream&& mBinStrm)
+  {
+    *this = std::move(mBinStrm);
+  }
+
+  MemoryBinaryStream& operator=(MemoryBinaryStream&& mBinStrm)
+  {
+    if (this != &mBinStrm)
+    {
+      m_Path = std::move(mBinStrm.m_Path);
+
+      m_pBuffer = mBinStrm.m_pBuffer;
+      mBinStrm.m_pBuffer = nullptr;
+
+      m_Size = mBinStrm.m_Size;
+      mBinStrm.m_Size = 0x0;
+
+      m_Endianness = mBinStrm.m_Endianness;
+      mBinStrm.m_Endianness = EndianUnknown;
+
+      m_Sha1 = std::move(mBinStrm.m_Sha1);
+    }
+    return *this;
+  }
 
   void Open(void const* pMem, u32 MemSize);
   void Close(void);
@@ -263,4 +384,4 @@ public:
 
 MEDUSA_NAMESPACE_END
 
-#endif // _MEDUSA_BINARY_STREAM_
+#endif // MEDUSA_BINARY_STREAM_HPP

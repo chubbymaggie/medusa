@@ -22,7 +22,7 @@ Document::~Document(void)
   RemoveAll();
 }
 
-bool Document::Use(Database::SharedPtr spDb)
+bool Document::Use(Database::SPType spDb)
 {
   if (m_spDatabase)
     return false;
@@ -37,9 +37,10 @@ bool Document::Flush(void)
 
 void Document::RemoveAll(void)
 {
-  m_spDatabase = nullptr;
   std::lock_guard<MutexType> Lock(m_CellMutex);
-  m_MultiCells.erase(std::begin(m_MultiCells), std::end(m_MultiCells));
+  for (auto MultiCellPair : m_MultiCells)
+    delete MultiCellPair.second;
+  m_MultiCells.clear();
   m_QuitSignal.disconnect_all_slots();
   m_DocumentUpdatedSignal.disconnect_all_slots();
   m_MemoryAreaUpdatedSignal.disconnect_all_slots();
@@ -71,12 +72,16 @@ void Document::Connect(u32 Type, Document::Subscriber* pSubscriber)
 
 MemoryArea const* Document::GetMemoryArea(Address const& rAddr) const
 {
+  if (m_spDatabase == nullptr)
+    return nullptr;
   return m_spDatabase->GetMemoryArea(rAddr);
 }
 
 Label Document::GetLabelFromAddress(Address const& rAddr) const
 {
   Label CurLbl;
+  if (m_spDatabase == nullptr)
+    return Label();
   m_spDatabase->GetLabel(rAddr, CurLbl);
   return CurLbl;
 }
@@ -89,12 +94,16 @@ void Document::SetLabelToAddress(Address const& rAddr, Label const& rLabel)
 Address Document::GetAddressFromLabelName(std::string const& rLabelName) const
 {
   Address LblAddr;
+  if (m_spDatabase == nullptr)
+    return Address();
   m_spDatabase->GetLabelAddress(rLabelName, LblAddr);
   return LblAddr;
 }
 
 void Document::AddLabel(Address const& rAddr, Label const& rLabel, bool Force)
 {
+  if (m_spDatabase == nullptr)
+    return;
   if (rLabel.GetName().empty() && Force)
   {
     RemoveLabel(rAddr);
@@ -133,6 +142,8 @@ void Document::AddLabel(Address const& rAddr, Label const& rLabel, bool Force)
 
 void Document::RemoveLabel(Address const& rAddr)
 {
+  if (m_spDatabase == nullptr)
+    return;
   Label CurLbl;
   m_spDatabase->GetLabel(rAddr, CurLbl);
   m_spDatabase->RemoveLabel(rAddr);
@@ -142,42 +153,58 @@ void Document::RemoveLabel(Address const& rAddr)
 
 void Document::ForEachLabel(Database::LabelCallback Callback) const
 {
+  if (m_spDatabase == nullptr)
+    return;
   m_spDatabase->ForEachLabel(Callback);
 }
 
 bool Document::AddCrossReference(Address const& rTo, Address const& rFrom)
 {
+  if (m_spDatabase == nullptr)
+    return false;
   return m_spDatabase->AddCrossReference(rTo, rFrom);
 }
 
 bool Document::RemoveCrossReference(Address const& rFrom)
 {
+  if (m_spDatabase == nullptr)
+    return false;
   return m_spDatabase->RemoveCrossReference(rFrom);
 }
 
 bool Document::RemoveCrossReferences(void)
 {
+  if (m_spDatabase == nullptr)
+    return false;
   return m_spDatabase->RemoveCrossReferences();
 }
 
 bool Document::HasCrossReferenceFrom(Address const& rTo) const
 {
+  if (m_spDatabase == nullptr)
+    return false;
   return m_spDatabase->HasCrossReferenceFrom(rTo);
 }
 
 bool Document::GetCrossReferenceFrom(Address const& rTo, Address::List& rFromList) const
 {
+  if (m_spDatabase == nullptr)
+    return false;
   return m_spDatabase->GetCrossReferenceFrom(rTo, rFromList);
 }
 
 bool Document::HasCrossReferenceTo(Address const& rFrom) const
 {
+  if (m_spDatabase == nullptr)
+    return false;
   return m_spDatabase->HasCrossReferenceTo(rFrom);
 }
 
-bool Document::GetCrossReferenceTo(Address const& rFrom, Address& rTo) const
+bool Document::GetCrossReferenceTo(Address const& rFrom, Address::List& rToList) const
 {
-  return m_spDatabase->GetCrossReferenceTo(rFrom, rTo);
+  if (m_spDatabase == nullptr)
+    return false;
+  return m_spDatabase->GetCrossReferenceTo(rFrom, rToList);
 }
 
 bool Document::ChangeValueSize(Address const& rValueAddr, u8 NewValueSize, bool Force)
@@ -185,7 +212,7 @@ bool Document::ChangeValueSize(Address const& rValueAddr, u8 NewValueSize, bool 
   if (NewValueSize == 0x0)
     return false;
 
-  Cell::SPtr spOldCell = GetCell(rValueAddr);
+  Cell::SPType spOldCell = GetCell(rValueAddr);
 
   if (spOldCell == nullptr)
     return false;
@@ -231,11 +258,15 @@ bool Document::MakeString(Address const& rAddress, u8 StringType, u16 StringLeng
 
 bool Document::GetComment(Address const& rAddress, std::string& rComment) const
 {
+  if (m_spDatabase == nullptr)
+    return false;
   return m_spDatabase->GetComment(rAddress, rComment);
 }
 
 bool Document::SetComment(Address const& rAddress, std::string const& rComment)
 {
+  if (m_spDatabase == nullptr)
+    return false;
   if (m_spDatabase->SetComment(rAddress, rComment))
   {
     m_DocumentUpdatedSignal();
@@ -244,9 +275,11 @@ bool Document::SetComment(Address const& rAddress, std::string const& rComment)
   return false;
 }
 
-Cell::SPtr Document::GetCell(Address const& rAddr)
+Cell::SPType Document::GetCell(Address const& rAddr)
 {
-  boost::mutex::scoped_lock Lock(m_CellMutex);
+  if (m_spDatabase == nullptr)
+    return nullptr;
+  std::lock_guard<MutexType> Lock(m_CellMutex);
 
   CellData CurCellData;
   if (!m_spDatabase->GetCellData(rAddr, CurCellData))
@@ -278,12 +311,14 @@ Cell::SPtr Document::GetCell(Address const& rAddr)
     break;
   }
 
-  return Cell::SPtr();
+  return Cell::SPType();
 }
 
-Cell::SPtr const Document::GetCell(Address const& rAddr) const
+Cell::SPType const Document::GetCell(Address const& rAddr) const
 {
-  boost::mutex::scoped_lock Lock(m_CellMutex);
+  if (m_spDatabase == nullptr)
+    return nullptr;
+  std::lock_guard<MutexType> Lock(m_CellMutex);
 
   CellData CurCellData;
   if (!m_spDatabase->GetCellData(rAddr, CurCellData))
@@ -315,11 +350,13 @@ Cell::SPtr const Document::GetCell(Address const& rAddr) const
     break;
   }
 
-  return Cell::SPtr();
+  return Cell::SPType();
 }
 
 u8 Document::GetCellType(Address const& rAddr) const
 {
+  if (m_spDatabase == nullptr)
+    return Cell::CellType;
   CellData CurCellData;
   if (!m_spDatabase->GetCellData(rAddr, CurCellData))
     return Cell::CellType;
@@ -328,14 +365,18 @@ u8 Document::GetCellType(Address const& rAddr) const
 
 u8 Document::GetCellSubType(Address const& rAddr) const
 {
+  if (m_spDatabase == nullptr)
+    return Cell::CellType;
   CellData CurCellData;
   if (!m_spDatabase->GetCellData(rAddr, CurCellData))
     return Cell::CellType;
   return CurCellData.GetSubType();
 }
 
-bool Document::SetCell(Address const& rAddr, Cell::SPtr spCell, bool Force)
+bool Document::SetCell(Address const& rAddr, Cell::SPType spCell, bool Force)
 {
+  if (m_spDatabase == nullptr)
+    return false;
   Address::List ErasedAddresses;
   if (!m_spDatabase->SetCellData(rAddr, *spCell->GetData(), ErasedAddresses, Force))
     return false;
@@ -368,8 +409,10 @@ bool Document::SetCell(Address const& rAddr, Cell::SPtr spCell, bool Force)
   return true;
 }
 
-bool Document::SetCellWithLabel(Address const& rAddr, Cell::SPtr spCell, Label const& rLabel, bool Force)
+bool Document::SetCellWithLabel(Address const& rAddr, Cell::SPType spCell, Label const& rLabel, bool Force)
 {
+  if (m_spDatabase == nullptr)
+    return false;
   Address::List ErasedAddresses;
   if (!m_spDatabase->SetCellData(rAddr, *spCell->GetData(), ErasedAddresses, Force))
     return false;
@@ -421,6 +464,8 @@ bool Document::SetCellWithLabel(Address const& rAddr, Cell::SPtr spCell, Label c
 
 bool Document::DeleteCell(Address const& rAddr)
 {
+  if (m_spDatabase == nullptr)
+    return false;
   if (!m_spDatabase->DeleteCellData(rAddr))
     return false;
 
@@ -459,7 +504,10 @@ bool Document::SetMultiCell(Address const& rAddr, MultiCell* pMultiCell, bool Fo
   {
     MultiCell::Map::iterator itMultiCell = m_MultiCells.find(rAddr);
     if (itMultiCell != m_MultiCells.end())
+    {
+      delete pMultiCell; // FIXME: multicell must be redesigned to avoid this situation...
       return false;
+    }
   }
 
   m_MultiCells[rAddr] = pMultiCell;
@@ -469,51 +517,82 @@ bool Document::SetMultiCell(Address const& rAddr, MultiCell* pMultiCell, bool Fo
   Address::List AddressList;
   AddressList.push_back(rAddr);
   m_AddressUpdatedSignal(AddressList);
+
+  if (pMultiCell->GetType() == MultiCell::StructType)
+  {
+    auto StructId = pMultiCell->GetId();
+    StructureDetail StructDtl;
+    if (!GetStructureDetail(StructId, StructDtl))
+      return true;
+    if (!_ApplyStructure(rAddr, StructDtl))
+    {
+      Log::Write("core") << "failed to apply structure at " << rAddr << LogEnd;
+    }
+  }
+
   return true;
 }
 
 bool Document::GetValueDetail(Id ConstId, ValueDetail& rConstDtl) const
 {
+  if (m_spDatabase == nullptr)
+    return false;
   return m_spDatabase->GetValueDetail(ConstId, rConstDtl);
 }
 
 bool Document::SetValueDetail(Id ConstId, ValueDetail const& rConstDtl)
 {
+  if (m_spDatabase == nullptr)
+    return false;
   return m_spDatabase->SetValueDetail(ConstId, rConstDtl);
 }
 
 bool Document::GetFunctionDetail(Id FuncId, FunctionDetail& rFuncDtl) const
 {
+  if (m_spDatabase == nullptr)
+    return false;
   return m_spDatabase->GetFunctionDetail(FuncId, rFuncDtl);
 }
 
 bool Document::SetFunctionDetail(Id FuncId, FunctionDetail const& rFuncDtl)
 {
+  if (m_spDatabase == nullptr)
+    return false;
   return m_spDatabase->SetFunctionDetail(FuncId, rFuncDtl);
 }
 
 bool Document::GetStructureDetail(Id StructId, StructureDetail& rStructDtl) const
 {
+  if (m_spDatabase == nullptr)
+    return false;
   return m_spDatabase->GetStructureDetail(StructId, rStructDtl);
 }
 
 bool Document::SetStructureDetail(Id StructId, StructureDetail const& rStructDtl)
 {
+  if (m_spDatabase == nullptr)
+    return false;
   return m_spDatabase->SetStructureDetail(StructId, rStructDtl);
 }
 
 bool Document::RetrieveDetailId(Address const& rAddress, u8 Index, Id& rDtlId) const
 {
+  if (m_spDatabase == nullptr)
+    return false;
   return m_spDatabase->RetrieveDetailId(rAddress, Index, rDtlId);
 }
 
 bool Document::BindDetailId(Address const& rAddress, u8 Index, Id DtlId)
 {
+  if (m_spDatabase == nullptr)
+    return false;
   return m_spDatabase->BindDetailId(rAddress, Index, DtlId);
 }
 
 bool Document::UnbindDetailId(Address const& rAddress, u8 Index)
 {
+  if (m_spDatabase == nullptr)
+    return false;
   return m_spDatabase->UnbindDetailId(rAddress, Index);
 }
 
@@ -575,16 +654,22 @@ bool Document::ConvertAddressToFileOffset(Address const& rAddr, TOffset& rFileOf
 
 bool Document::ConvertAddressToPosition(Address const& rAddr, u32& rPosition) const
 {
+  if (m_spDatabase == nullptr)
+    return false;
   return m_spDatabase->ConvertAddressToPosition(rAddr, rPosition);
 }
 
 bool Document::ConvertPositionToAddress(u32 Position, Address& rAddr) const
 {
+  if (m_spDatabase == nullptr)
+    return false;
   return m_spDatabase->ConvertPositionToAddress(Position, rAddr);
 }
 
 Address Document::GetStartAddress(void) const
 {
+  if (m_spDatabase == nullptr)
+    return Address();
   Address StartAddr;
   if (m_spDatabase->GetLabelAddress(std::string("start"), StartAddr))
     return StartAddr;
@@ -594,6 +679,8 @@ Address Document::GetStartAddress(void) const
 
 Address Document::GetFirstAddress(void) const
 {
+  if (m_spDatabase == nullptr)
+    return Address();
   Address FirstAddr;
   m_spDatabase->GetFirstAddress(FirstAddr);
   return FirstAddr;
@@ -601,6 +688,8 @@ Address Document::GetFirstAddress(void) const
 
 Address Document::GetLastAddress(void) const
 {
+  if (m_spDatabase == nullptr)
+    return Address();
   Address LastAddr;
   m_spDatabase->GetLastAddress(LastAddr);
   return LastAddr;
@@ -608,6 +697,8 @@ Address Document::GetLastAddress(void) const
 
 u32 Document::GetNumberOfAddress(void) const
 {
+  if (m_spDatabase == nullptr)
+    return 0;
   u32 Res = 0;
   m_spDatabase->ForEachMemoryArea([&Res](MemoryArea const& rMemArea)
   {
@@ -628,6 +719,8 @@ bool Document::ContainsCode(Address const& rAddress) const
 
 bool Document::ContainsUnknown(Address const& rAddress) const
 {
+  if (m_spDatabase == nullptr)
+    return false;
   CellData CurCellData;
   if (!m_spDatabase->GetCellData(rAddress, CurCellData))
     return false;
@@ -659,6 +752,8 @@ Tag Document::GetArchitectureTag(Address const& rAddress) const
 
 std::list<Tag> Document::GetArchitectureTags(void) const
 {
+  if (m_spDatabase == nullptr)
+    return std::list<Tag>();
   return m_spDatabase->GetArchitectureTags();
 }
 
@@ -701,6 +796,8 @@ u8 Document::GetMode(Address const& rAddress) const
 
 void Document::AddMemoryArea(MemoryArea* pMemoryArea)
 {
+  if (m_spDatabase == nullptr)
+    return;
   if (!m_spDatabase->AddMemoryArea(pMemoryArea))
   {
     Log::Write("core") << "unable to add memory area: " << pMemoryArea->Dump() << LogEnd;
@@ -711,26 +808,36 @@ void Document::AddMemoryArea(MemoryArea* pMemoryArea)
 
 void Document::ForEachMemoryArea(Database::MemoryAreaCallback Callback) const
 {
+  if (m_spDatabase == nullptr)
+    return;
   m_spDatabase->ForEachMemoryArea(Callback);
 }
 
 bool Document::MoveAddress(Address const& rAddress, Address& rMovedAddress, s64 Offset) const
 {
+  if (m_spDatabase == nullptr)
+    return false;
   return m_spDatabase->MoveAddress(rAddress, rMovedAddress, Offset);
 }
 
 bool Document::GetPreviousAddress(Address const& rAddress, Address& rPreviousAddress) const
 {
+  if (m_spDatabase == nullptr)
+    return false;
   return m_spDatabase->MoveAddress(rAddress, rPreviousAddress, -1);
 }
 
 bool Document::GetNextAddress(Address const& rAddress, Address& rNextAddress) const
 {
+  if (m_spDatabase == nullptr)
+    return false;
   return m_spDatabase->MoveAddress(rAddress, rNextAddress, 1);
 }
 
 bool Document::GetNearestAddress(Address const& rAddress, Address& rNearestAddress) const
 {
+  if (m_spDatabase == nullptr)
+    return false;
   return m_spDatabase->MoveAddress(rAddress, rNearestAddress, 0);
 }
 
@@ -745,8 +852,99 @@ void Document::RemoveLabelIfNeeded(Address const& rAddr)
     RemoveLabel(rAddr);
 }
 
+bool Document::_ApplyStructure(Address const& rAddr, StructureDetail const& rStructDtl)
+{
+
+  rStructDtl.ForEachField([&](u32 Offset, TypedValueDetail const& rField) -> bool
+  {
+    Address CurFldAddr = rAddr + Offset;
+
+    std::string Cmt;
+    GetComment(CurFldAddr, Cmt);
+    Cmt += "struct " + rStructDtl.GetName();
+    SetComment(CurFldAddr, Cmt);
+
+    if (!_ApplyTypedValue(rAddr, CurFldAddr, rField))
+      return false;
+
+    return true;
+  });
+
+  return true;
+}
+
+bool Document::_ApplyTypedValue(Address const& rParentAddr, Address const& rAddr, TypedValueDetail const& rTpValDtl)
+{
+  if ( !_ApplyType(rAddr, rTpValDtl.GetType())
+    || !_ApplyValue(rAddr, rTpValDtl.GetValue()))
+    return false;
+
+  std::string Cmt;
+  GetComment(rAddr, Cmt);
+  if (!Cmt.empty())
+    Cmt += " ";
+  Cmt += rTpValDtl.GetName();
+
+  if (!SetComment(rAddr, Cmt))
+    return false;
+
+  auto const& rValDtl = rTpValDtl.GetValue();
+  auto RefId = rValDtl.GetRefId();
+
+  switch (rValDtl.GetType())
+  {
+  case ValueDetail::RelativeType:
+  {
+    StructureDetail RefStructDtl;
+    if (!GetStructureDetail(RefId, RefStructDtl))
+      break;
+    TOffset Pos, RefOff;
+    if (!ConvertAddressToFileOffset(rAddr, Pos))
+      break;
+    if (!GetBinaryStream().Read(Pos, RefOff, rTpValDtl.GetSize(), true))
+      break;
+    if (!_ApplyStructure(rParentAddr + RefOff, RefStructDtl))
+      break;
+
+    AddCrossReference(rParentAddr + RefOff, rAddr);
+
+    Log::Write("core") << "relative structure " << RefStructDtl.GetName() << LogEnd;
+    break;
+  }
+
+  case ValueDetail::CompositeType:
+  {
+    StructureDetail CpsStructDtl;
+    if (!GetStructureDetail(RefId, CpsStructDtl))
+      break;
+    if (!_ApplyStructure(rAddr, CpsStructDtl))
+      break;
+
+    Log::Write("core") << "composite structure " << CpsStructDtl.GetName() << LogEnd;
+    break;
+  }
+
+  default:
+    break;
+  }
+
+  return true;
+}
+
+bool Document::_ApplyType(Address const& rAddr, TypeDetail::SPType const& rspTpDtl)
+{
+  return ChangeValueSize(rAddr, rspTpDtl->GetBitSize(), true);
+}
+
+bool Document::_ApplyValue(Address const& rAddr, ValueDetail const& rValDtl)
+{
+  return true;
+}
+
 std::string Document::GetOperatingSystemName(void) const
 {
+  if (m_spDatabase == nullptr)
+    return "";
   return m_spDatabase->GetOperatingSystemName();
 }
 

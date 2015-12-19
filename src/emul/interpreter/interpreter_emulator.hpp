@@ -1,5 +1,5 @@
-#ifndef _EMUL_INTERPRETER_
-#define _EMUL_INTERPRETER_
+#ifndef EMUL_INTERPRETER_HPP
+#define EMUL_INTERPRETER_HPP
 
 #include <medusa/emulation.hpp>
 
@@ -25,34 +25,57 @@ public:
 
   virtual std::string GetName(void) const { return "interpreter"; }
 
-  virtual bool Execute(Address const& rAddress, Expression const& rExpr);
-  virtual bool Execute(Address const& rAddress, Expression::List const& rExprList);
+  virtual ReturnType Execute(Expression::VSPType const& rExprs);
 
 protected:
+  std::unordered_map<std::string, BitVector> m_Vars;
 
 private:
   class InterpreterExpressionVisitor : public ExpressionVisitor
   {
   public:
-    InterpreterExpressionVisitor(HookAddressHashMap const& Hooks, CpuContext* pCpuCtxt, MemoryContext* pMemCtxt, VariableContext* pVarCtxt)
-      : m_rHooks(Hooks), m_pCpuCtxt(pCpuCtxt), m_pMemCtxt(pMemCtxt), m_pVarCtxt(pVarCtxt) {}
-    virtual Expression* VisitBind(Expression::List const& rExprList);
-    virtual Expression* VisitCondition(u32 Type, Expression const* pRefExpr, Expression const* pTestExpr);
-    virtual Expression* VisitIfCondition(u32 Type, Expression const* pRefExpr, Expression const* pTestExpr, Expression const* pThenExpr);
-    virtual Expression* VisitIfElseCondition(u32 Type, Expression const* pRefExpr, Expression const* pTestExpr, Expression const* pThenExpr, Expression const* pElseExpr);
-    virtual Expression* VisitWhileCondition(u32 Type, Expression const* pRefExpr, Expression const* pTestExpr, Expression const* pBodyExpr);
-    virtual Expression* VisitOperation(u32 Type, Expression const* pLeftExpr, Expression const* pRightExpr);
-    virtual Expression* VisitConstant(u32 Type, u64 Value);
-    virtual Expression* VisitIdentifier(u32 Id, CpuInformation const* pCpuInfo);
-    virtual Expression* VisitMemory(u32 AccessSizeInBit, Expression const* pBaseExpr, Expression const* pOffsetExpr, bool Deref);
-    virtual Expression* VisitVariable(u32 SizeInBit, std::string const& rName);
+    InterpreterExpressionVisitor(HookAddressHashMap const& Hooks, CpuContext* pCpuCtxt, MemoryContext* pMemCtxt, std::unordered_map<std::string, BitVector>& rVars)
+      : m_rHooks(Hooks), m_pCpuCtxt(pCpuCtxt), m_pMemCtxt(pMemCtxt), m_rVars(rVars), m_NrOfValueToRead(), m_State(Unknown) {}
+
+    virtual ~InterpreterExpressionVisitor(void);
+
+    virtual Expression::SPType VisitSystem(SystemExpression::SPType spSysExpr);
+    virtual Expression::SPType VisitBind(BindExpression::SPType spBindExpr);
+    virtual Expression::SPType VisitTernaryCondition(TernaryConditionExpression::SPType spTernExpr);
+    virtual Expression::SPType VisitIfElseCondition(IfElseConditionExpression::SPType spIfElseExpr);
+    virtual Expression::SPType VisitWhileCondition(WhileConditionExpression::SPType spWhileExpr);
+    virtual Expression::SPType VisitAssignment(AssignmentExpression::SPType spAssignExpr);
+    virtual Expression::SPType VisitUnaryOperation(UnaryOperationExpression::SPType spUnOpExpr);
+    virtual Expression::SPType VisitBinaryOperation(BinaryOperationExpression::SPType spBinOpExpr);
+    virtual Expression::SPType VisitBitVector(BitVectorExpression::SPType spConstExpr);
+    virtual Expression::SPType VisitIdentifier(IdentifierExpression::SPType spIdExpr);
+    virtual Expression::SPType VisitVectorIdentifier(VectorIdentifierExpression::SPType spVecIdExpr);
+    virtual Expression::SPType VisitTrack(TrackExpression::SPType spTrkExpr);
+    virtual Expression::SPType VisitVariable(VariableExpression::SPType spVarExpr);
+    virtual Expression::SPType VisitMemory(MemoryExpression::SPType spMemExpr);
+    virtual Expression::SPType VisitSymbolic(SymbolicExpression::SPType spSymExpr);
 
   protected:
     HookAddressHashMap const& m_rHooks;
     CpuContext*               m_pCpuCtxt;
     MemoryContext*            m_pMemCtxt;
-    VariableContext*          m_pVarCtxt;
+
+  private:
+    bool _EvaluateComparison(u8 CondOp, bool& rRes);
+
+    std::unordered_map<std::string, BitVector>& m_rVars;
+    Expression::DataContainerType m_Values;
+    size_t m_NrOfValueToRead;
+
+    enum State
+    {
+      Unknown,
+      Read,
+      Write,
+    };
+
+    State m_State;
   };
 };
 
-#endif // !_EMUL_INTERPRETER_
+#endif // !EMUL_INTERPRETER_HPP

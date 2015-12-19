@@ -1,5 +1,5 @@
-#ifndef _RAW_LOADER_
-#define _RAW_LOADER_
+#ifndef LDR_RAW_HPP
+#define LDR_RAW_HPP
 
 #include <medusa/document.hpp>
 #include <medusa/loader.hpp>
@@ -24,10 +24,10 @@ public:
   virtual std::string GetName(void) const;
   virtual u8          GetDepth(void) const { return 0; }
   virtual bool        IsCompatible(BinaryStream const& rBinStrm);
-  virtual void        Map(Document& rDoc, Architecture::VectorSharedPtr const& rArchs);
-  virtual void        FilterAndConfigureArchitectures(Architecture::VectorSharedPtr& rArchs) const;
+  virtual void        Map(Document& rDoc, Architecture::VSPType const& rArchs);
+  virtual void        FilterAndConfigureArchitectures(Architecture::VSPType& rArchs) const;
 };
 
 extern "C" LDR_RAW_EXPORT Loader* GetLoader(void);
 
-#endif // _RAW_LOADER_
+#endif // !LDR_RAW_HPP

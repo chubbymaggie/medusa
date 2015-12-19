@@ -1,5 +1,5 @@
-#ifndef __ARM_DEF_HPP__
-#define __ARM_DEF_HPP__
+#ifndef ARCH_ARM_DEF_HPP
+#define ARCH_ARM_DEF_HPP
 
 enum ARM_Mode
 {
@@ -35,33 +35,43 @@ enum ARM_Condition
 
 enum ARM_Register
 {
-  ARM_RegR0  = 1 << 0,
-  ARM_RegR1  = 1 << 1,
-  ARM_RegR2  = 1 << 2,
-  ARM_RegR3  = 1 << 3,
-  ARM_RegR4  = 1 << 4,
-  ARM_RegR5  = 1 << 5,
-  ARM_RegR6  = 1 << 6,
-  ARM_RegR7  = 1 << 7,
-  ARM_RegR8  = 1 << 8,
-  ARM_RegR9  = 1 << 9,
-  ARM_RegR10 = 1 << 10,
-  ARM_RegR11 = 1 << 11,
-  ARM_RegR12 = 1 << 12,
-  ARM_RegR13 = 1 << 13,
-  ARM_RegR14 = 1 << 14,
-  ARM_RegSP  = 1 << 14,
-  ARM_RegR15 = 1 << 15,
-  ARM_RegPC  = 1 << 15
+  ARM_RegUnknown,
+
+  ARM_FlNf,
+  ARM_FlCf,
+  ARM_FlVf,
+  ARM_FlZf,
+
+  ARM_RegR0,
+  ARM_RegR1,
+  ARM_RegR2,
+  ARM_RegR3,
+  ARM_RegR4,
+  ARM_RegR5,
+  ARM_RegR6,
+  ARM_RegR7,
+  ARM_RegR8,
+  ARM_RegR9,
+  ARM_RegR10,
+  ARM_RegR11,
+  ARM_RegFP = ARM_RegR11,
+  ARM_RegR12,
+  ARM_RegIP = ARM_RegR12,
+  ARM_RegR13,
+  ARM_RegSP = ARM_RegR13,
+  ARM_RegR14,
+  ARM_RegLR = ARM_RegR14,
+  ARM_RegR15,
+  ARM_RegPC = ARM_RegR15,
 };
 
-enum ARM_Flag
+enum CSPR_Flags
 {
-  ARM_FlNone,
-  ARM_FlNf = 1 << 0,
-  ARM_FlCf = 1 << 1,
-  ARM_FlVf = 1 << 2,
-  ARM_FlZf = 1 << 3
+  ARM_CSPR_T = 1 << 5,  //! State bit (Thumb)
+  ARM_CSPR_V = 1 << 28, //! Overflow
+  ARM_CSPR_C = 1 << 29, //! Carry or borrow or extend
+  ARM_CSPR_Z = 1 << 30, //! Zero
+  ARM_CSPR_N = 1 << 31, //! Negative or less than
 };
 
 enum ARM_Prefix
@@ -74,4 +84,4 @@ enum ARM_Prefix
   ARM_Prefix_P = 1 << 4  /* Pre/Post indexing */
 };
 
-#endif // !__ARM_DEF_HPP__
+#endif // !ARM_DEF_HPP

@@ -1,5 +1,5 @@
-#ifndef __MEDUSA_CELL_TEXT_HPP__
-#define __MEDUSA_CELL_TEXT_HPP__
+#ifndef MEDUSA_CELL_TEXT_HPP
+#define MEDUSA_CELL_TEXT_HPP
 
 #include "medusa/export.hpp"
 #include "medusa/namespace.hpp"
@@ -71,6 +71,7 @@ public:
   PrintData(void);
 
   void PrependAddress(bool Flag) { m_PrependAddress = Flag; }
+  void SetIndent(u8 Indent) { m_Indent = Indent; }
 
   PrintData& operator()(Address const& rAddress);
 
@@ -80,7 +81,8 @@ public:
   { _AppendText(rRegister, Mark::RegisterType);   return *this; }
   PrintData& AppendImmediate(std::string const& rImmediate)
   { _AppendText(rImmediate, Mark::ImmediateType); return *this; }
-  PrintData& AppendImmediate(u64 Immediate, u32 Bits, u8 Base = 0x10);
+  PrintData& AppendImmediate(ap_int const& rImmediate, u32 Bits, u8 Base = 0x10);
+  PrintData& AppendImmediate(BitVector const& rImmediate, u8 Base = 0x10);
   PrintData& AppendLabel    (std::string const& rLabel)
   { _AppendText(rLabel, Mark::LabelType);         return *this; }
   PrintData& AppendKeyword  (std::string const& rKeyword)
@@ -146,6 +148,7 @@ private:
   u16                 m_Width;
   u16                 m_LineWidth;
   u16                 m_Height;
+  u8                  m_Indent;
 
   typedef std::mutex MutexType;
   mutable MutexType m_Mutex;
@@ -153,4 +156,4 @@ private:
 
 MEDUSA_NAMESPACE_END
 
-#endif // !__MEDUSA_CELL_TEXT_HPP__
+#endif // !MEDUSA_CELL_TEXT_HPP

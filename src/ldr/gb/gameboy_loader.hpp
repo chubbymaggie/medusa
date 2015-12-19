@@ -1,5 +1,5 @@
-#ifndef _GAMEBOY_LOADER_
-#define _GAMEBOY_LOADER_
+#ifndef LDR_GAMEBOY_HPP
+#define LDR_GAMEBOY_HPP
 
 #include <medusa/document.hpp>
 #include <medusa/loader.hpp>
@@ -23,8 +23,8 @@ public:
   virtual std::string GetName(void) const;
   virtual u8          GetDepth(void) const { return 1; }
   virtual bool        IsCompatible(BinaryStream const& rBinStrm);
-  virtual void        Map(Document& rDoc, Architecture::VectorSharedPtr const& rArchs);
-  virtual void        FilterAndConfigureArchitectures(Architecture::VectorSharedPtr& rArchs) const;
+  virtual void        Map(Document& rDoc, Architecture::VSPType const& rArchs);
+  virtual void        FilterAndConfigureArchitectures(Architecture::VSPType& rArchs) const;
 
 private:
   typedef u16 BankType;
@@ -36,4 +36,4 @@ private:
 
 extern "C" LDR_GB_EXPORT Loader* GetLoader(void);
 
-#endif // _GAMEBOY_LOADER_
+#endif // LDR_GAMEBOY_HPP

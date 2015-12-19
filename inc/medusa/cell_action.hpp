@@ -1,5 +1,5 @@
-#ifndef _MEDUSA_CELL_ACTION_
-#define _MEDUSA_CELL_ACTION_
+#ifndef MEDUSA_CELL_ACTION_HPP
+#define MEDUSA_CELL_ACTION_HPP
 
 #include <string>
 #include <map>
@@ -14,21 +14,22 @@
 #include "medusa/cell.hpp"
 #include "medusa/architecture.hpp"
 #include "medusa/medusa.hpp"
+#include "medusa/disassembly_view.hpp"
 
 MEDUSA_NAMESPACE_BEGIN
 
 class Medusa_EXPORT Action
 {
 public:
-  typedef std::shared_ptr<Action> SPtr;
-  typedef std::list<SPtr> SPtrList;
+  typedef std::shared_ptr<Action> SPType;
+  typedef std::list<SPType> SPTypeList;
 
-  typedef SPtr (*CreateType)(Medusa& rCore);
+  typedef SPType (*CreateType)(Medusa& rCore, FullDisassemblyView* pView);
   typedef std::map<char const*, CreateType> MapType;
 
   typedef std::pair<Address, Address> RangeAddress;
 
-  static SPtr        Create(Medusa& rCore);
+  static SPType        Create(Medusa& rCore, FullDisassemblyView* pView);
   static char const* GetBindingName(void);
 
   virtual ~Action(void) {}
@@ -36,16 +37,17 @@ public:
   virtual std::string GetName(void) const = 0;
   virtual std::string GetDescription(void) const = 0;
   virtual std::string GetIconName(void) const = 0;
-  virtual bool        IsCompatible(RangeAddress const& rRangeAddress, u8 Index) const = 0;
-  virtual void        Do(RangeAddress const& rRangeAddress, u8 Index) = 0;
+  virtual bool        IsCompatible(void) const = 0;
+  virtual void        Do(void) = 0;
 
   static MapType  GetMap(void);
-  static SPtrList GetSpecificActions(Medusa& rCore, Address const& rAddress);
+  static SPTypeList GetSpecificActions(Medusa& rCore, FullDisassemblyView* pView, Address const& rAddress);
 
 protected:
-  Action(Medusa& rCore) : m_rCore(rCore) {}
+  Action(Medusa& rCore, FullDisassemblyView* pView) : m_rCore(rCore), m_pView(pView) {}
 
   Medusa& m_rCore;
+  FullDisassemblyView* m_pView;
 
 private:
   Action(Action const&);
@@ -54,4 +56,4 @@ private:
 
 MEDUSA_NAMESPACE_END
 
-#endif //!_MEDUSA_CELL_ACTION_
+#endif //!MEDUSA_CELL_ACTION_HPP

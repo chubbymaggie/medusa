@@ -1,5 +1,5 @@
-#ifndef _X86_CONST_
-#define _X86_CONST_
+#ifndef ARCH_X86_CONST_HPP
+#define ARCH_X86_CONST_HPP
 
 enum X86_Reg
 {
@@ -41,7 +41,6 @@ enum X86_Reg
   X86_Reg_R14w,
   X86_Reg_R15w,
   X86_Reg_Ip,
-  X86_Reg_Flags,
   X86_Reg_Es,
   X86_Reg_Cs,
   X86_Reg_Ss,
@@ -67,7 +66,6 @@ enum X86_Reg
   X86_Reg_R14d,
   X86_Reg_R15d,
   X86_Reg_Eip,
-  X86_Reg_Eflags,
   X86_Reg_Cr0,
   X86_Reg_Cr1,
   X86_Reg_Cr2,
@@ -125,7 +123,6 @@ enum X86_Reg
   X86_Reg_R14,
   X86_Reg_R15,
   X86_Reg_Rip,
-  X86_Reg_Rflags,
   X86_Reg_St0,
   X86_Reg_St1,
   X86_Reg_St2,
@@ -372,4 +369,4 @@ enum X86_Condition
   X86_Cond_Z
 };
 
-#endif // !_X86_CONST_
+#endif // !ARCH_X86_CONST_HPP

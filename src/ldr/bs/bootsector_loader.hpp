@@ -1,5 +1,5 @@
-#ifndef BOOTSECTOR_LOADER
-#define BOOTSECTOR_LOADER
+#ifndef LDR_BOOTSECTOR_HPP
+#define LDR_BOOTSECTOR_HPP
 
 #include "medusa/namespace.hpp"
 #include "medusa/document.hpp"
@@ -23,8 +23,8 @@ public:
   virtual std::string GetName(void) const;
   virtual u8          GetDepth(void) const { return 1; }
   virtual bool        IsCompatible(BinaryStream const& rBinStrm);
-  virtual void        Map(Document& rDoc, Architecture::VectorSharedPtr const& rArchs);
-  virtual void        FilterAndConfigureArchitectures(Architecture::VectorSharedPtr& rArchs) const;
+  virtual void        Map(Document& rDoc, Architecture::VSPType const& rArchs);
+  virtual void        FilterAndConfigureArchitectures(Architecture::VSPType& rArchs) const;
 
 private:
   enum { AddressOffset = 0x7c00 };
@@ -32,4 +32,4 @@ private:
 
 extern "C" LDR_BS_EXPORT Loader* GetLoader(void);
 
-#endif // !BOOTSECTOR_LOADER
+#endif // !LDR_BOOTSECTOR_HPP
