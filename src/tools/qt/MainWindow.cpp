@@ -178,7 +178,7 @@ bool MainWindow::openDocument()
   return _medusa.NewDocument(std::make_shared<medusa::FileBinaryStream>(_fileName.toStdWString()), true,
     [&](medusa::Path& rDbPath, std::list<medusa::Medusa::Filter> const& filters)
   {
-    auto DbPrDbPathath = QFileDialog::getSaveFileName(this,
+    rDbPath = QFileDialog::getSaveFileName(this,
       "Select a database path",
       QString::fromStdString(rDbPath.string())
       ).toStdString();
@@ -370,7 +370,7 @@ void MainWindow::addDisassemblyView(medusa::Address const& startAddr)
 
 void MainWindow::addSemanticView(medusa::Address const& funcAddr)
 {
-  auto func = _medusa.GetMultiCell(funcAddr);
+  auto func = _medusa.GetDocument().GetMultiCell(funcAddr);
   if (func == nullptr || func->GetType() != medusa::MultiCell::FunctionType)
     return;
 
@@ -394,6 +394,19 @@ void MainWindow::addControlFlowGraphView(medusa::Address const& funcAddr)
   auto cfgScene = new ControlFlowGraphScene(this->tabWidget, _medusa, funcAddr);
   cfgView->setScene(cfgScene);
   this->tabWidget->addTab(cfgView, QIcon(":/icons/view-graph.png"), QString("Graph of function %1").arg(funcLbl));
+}
+
+void MainWindow::addGraphView(medusa::Address const& rMcAddr)
+{
+  auto lbl = _medusa.GetDocument().GetLabelFromAddress(rMcAddr);
+  QString McLbl = QString::fromStdString(rMcAddr.ToString());
+  if (lbl.GetType() != medusa::Label::Unknown)
+    McLbl = QString::fromStdString(lbl.GetLabel());
+
+  auto pGraphView = new GraphView(this);
+  auto pGraphScene = new GraphScene(this->tabWidget, _medusa, rMcAddr);
+  pGraphView->setScene(pGraphScene);
+  this->tabWidget->addTab(pGraphView, QIcon(":/icons/view-graph.png"), QString("Graph of %1").arg(McLbl));
 }
 
 void MainWindow::on_actionAbout_triggered()
@@ -485,7 +498,7 @@ void MainWindow::goTo(medusa::Address const& addr)
 
 void MainWindow::setCurrentAddress(medusa::Address const& addr)
 {
-  medusa::TOffset Off;
+  medusa::OffsetType Off;
   QString OffStr = "";
   if (!_medusa.GetDocument().ConvertAddressToFileOffset(addr, Off))
     OffStr = "(unknown)";

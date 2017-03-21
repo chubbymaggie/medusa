@@ -41,7 +41,7 @@ void LabelDialog::SetLabel(void)
     LblType |= medusa::Label::String;
   else if (CodeButton->isChecked())
     LblType |= medusa::Label::Code;
-  else if (CodeButton->isChecked())
+  else if (FunctionButton->isChecked())
     LblType |= medusa::Label::Function;
 
   if (LocalButton->isChecked())
@@ -50,6 +50,6 @@ void LabelDialog::SetLabel(void)
     LblType |= medusa::Label::Global;
 
   medusa::Label NewLbl(LabelName->text().toStdString(), LblType);
-  m_rCore.GetDocument().SetLabelToAddress(m_rAddress, NewLbl);
+  m_rCore.GetDocument().AddLabel(m_rAddress, NewLbl);
   done(QDialog::Accepted);
 }

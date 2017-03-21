@@ -1,5 +1,5 @@
-#define BOOST_TEST_MODULE TestExpression
-#include <boost/test/unit_test.hpp>
+#define CATCH_CONFIG_MAIN
+#include <catch.hpp>
 
 #include <medusa/expression.hpp>
 #include <medusa/expression_filter.hpp>
@@ -10,24 +10,63 @@
 
 using namespace medusa;
 
-BOOST_AUTO_TEST_SUITE(expression_test_suite)
-
-BOOST_AUTO_TEST_CASE(expr_const_test_case)
+TEST_CASE("parsing", "[expr]")
 {
-  BOOST_TEST_MESSAGE("Testing creation of BitVectorExpression");
-  auto spConstExpr = Expr::MakeBitVector(16, 0x1234);
-  BOOST_CHECK(spConstExpr != nullptr);
+  INFO("Testing expression parser");
+
+  auto& rModMgr = ModuleManager::Instance();
+  auto pX86Getter = rModMgr.LoadModule<TGetArchitecture>(".", "x86");
+  REQUIRE(pX86Getter != nullptr);
+  auto pX86Disasm = pX86Getter();
+
+  auto const X86_64_Mode = pX86Disasm->GetModeByName("64-bit");
+  REQUIRE(X86_64_Mode != 0);
+  auto const pCpuInfo = pX86Disasm->GetCpuInformation();
+
+  auto TestParseExpr = [&](std::string const& rExprStr)
+  {
+    std::cout << "input expression:  " << rExprStr << std::endl;
+    auto Res = Expression::Parse(rExprStr, *pCpuInfo, X86_64_Mode);
+    CHECK(Res.size() == 1);
+    if (Res.size() < 1)
+      return;
+    std::cout << "parsed expression: " << Res[0]->ToString() << std::endl;
+    CHECK(Res[0]->ToString() == rExprStr);
+  };
+
+  TestParseExpr("(Id64(rax) = bv64(0x0000000011223344))");
+  TestParseExpr("Var32[alloc] test");
+  TestParseExpr("(Var32[use] test = bv32(0xDEADBEEF))");
+  TestParseExpr("(Id32(eax) = Var32[use] test)");
+  TestParseExpr("Var32[free] test");
+  TestParseExpr("(Id64(rcx) = Sym(parm, \"blabla\", 1122334455667788, Var64[use] test))");
+  TestParseExpr("(Id32(ecx) = Sym(parm, \"blabla\", aabbccdd))");
+  TestParseExpr("(Mem32((Id64(rsp) + bv64(0x0000000000000008))) = Id32(ecx))");
+  TestParseExpr("(Var64[use] cheeki = Mem64(bv64(0x0000000140000000)))");
+  TestParseExpr("(Var64[use] cheeki = Mem64(Id16(fs):bv64(0x0000000140000000)))"); // FIXME(wisk): see below
+  TestParseExpr("(Var64[use] cheeki = Addr64(bv64(0x0000000000000120)))");
+  TestParseExpr("(Var64[use] cheeki = Addr64(Id16(fs):bv64(0x0000000000000120)))"); // FIXME(wisk): parsing base doesn't work
+  TestParseExpr("(Var64[use] cheeki = Var64[use] breeki)");
+  TestParseExpr("(Id8(al) = (bv8(0xFF) * bv8(0x00)))");
+  TestParseExpr("(Id16(ax) = (bv16(0x1234) & ~(bv16(0xFF00))))");
 }
 
-BOOST_AUTO_TEST_CASE(expr_x86_id_nrm_eval)
+TEST_CASE("const", "[expr]")
+{
+  INFO("Testing creation of BitVectorExpression");
+  auto spConstExpr = Expr::MakeBitVector(16, 0x1234);
+  CHECK(spConstExpr != nullptr);
+}
+
+TEST_CASE("x86 id normalization", "[expr]")
 {
   auto& rModMgr = ModuleManager::Instance();
   auto pX86Getter = rModMgr.LoadModule<TGetArchitecture>(".", "x86");
-  BOOST_REQUIRE(pX86Getter != nullptr);
+  REQUIRE(pX86Getter != nullptr);
   auto pX86Disasm = pX86Getter();
 
   auto const X86_32_Mode = pX86Disasm->GetModeByName("32-bit");
-  BOOST_REQUIRE(X86_32_Mode != 0);
+  REQUIRE(X86_32_Mode != 0);
 
   auto const pCpuInfo = pX86Disasm->GetCpuInformation();
   auto AH = pCpuInfo->ConvertNameToIdentifier("ah");
@@ -49,22 +88,22 @@ BOOST_AUTO_TEST_CASE(expr_x86_id_nrm_eval)
   EvalVst.SetId(EBX, spEbxExpr);
   spExpr->Visit(&EvalVst);
   auto spRes = expr_cast<BitVectorExpression>(EvalVst.GetResultExpression());
-  BOOST_REQUIRE(spRes != nullptr);
+  REQUIRE(spRes != nullptr);
   std::cout << "res: " << spRes->ToString() << std::endl;
-  BOOST_CHECK(spRes->GetInt().ConvertTo<u32>() == 0x1122cc44);
+  CHECK(spRes->GetInt().ConvertTo<u32>() == 0x1122cc44);
 
   delete pX86Disasm;
 }
 
-BOOST_AUTO_TEST_CASE(expr_x86_64_id_nrm_eval)
+TEST_CASE("x86-64 id normalization", "[expr]")
 {
   auto& rModMgr = ModuleManager::Instance();
   auto pX86Getter = rModMgr.LoadModule<TGetArchitecture>(".", "x86");
-  BOOST_REQUIRE(pX86Getter != nullptr);
+  REQUIRE(pX86Getter != nullptr);
   auto pX86Disasm = pX86Getter();
 
   auto const X86_64_Mode = pX86Disasm->GetModeByName("64-bit");
-  BOOST_REQUIRE(X86_64_Mode != 0);
+  REQUIRE(X86_64_Mode != 0);
 
   auto const pCpuInfo = pX86Disasm->GetCpuInformation();
   auto EAX = pCpuInfo->ConvertNameToIdentifier("eax");
@@ -81,22 +120,22 @@ BOOST_AUTO_TEST_CASE(expr_x86_64_id_nrm_eval)
   EvalVst.SetId(RAX, Expr::MakeBitVector(64, 0xffffffffffffffff));
   spExpr->Visit(&EvalVst);
   auto spRes = expr_cast<BitVectorExpression>(EvalVst.GetResultExpression());
-  BOOST_REQUIRE(spRes != nullptr);
+  REQUIRE(spRes != nullptr);
   std::cout << "res: " << spRes->ToString() << std::endl;
-  BOOST_CHECK(spRes->GetInt().ConvertTo<u32>() == 0x11223344);
+  CHECK(spRes->GetInt().ConvertTo<u32>() == 0x11223344);
 
   delete pX86Disasm;
 }
 
-BOOST_AUTO_TEST_CASE(expr_x86_id_nrm_trk_eval)
+TEST_CASE("x86 id normalization, track and evaluation", "[expr]")
 {
   auto& rModMgr = ModuleManager::Instance();
   auto pX86Getter = rModMgr.LoadModule<TGetArchitecture>(".", "x86");
-  BOOST_REQUIRE(pX86Getter != nullptr);
+  REQUIRE(pX86Getter != nullptr);
   auto pX86Disasm = pX86Getter();
 
   auto const X86_32_Mode = pX86Disasm->GetModeByName("32-bit");
-  BOOST_REQUIRE(X86_32_Mode != 0);
+  REQUIRE(X86_32_Mode != 0);
 
   auto const pCpuInfo = pX86Disasm->GetCpuInformation();
   auto AL = pCpuInfo->ConvertNameToIdentifier("al");
@@ -151,15 +190,15 @@ BOOST_AUTO_TEST_CASE(expr_x86_id_nrm_trk_eval)
 
   std::cout << SymVst.ToString() << std::endl;
 
-  auto spRes = expr_cast<BitVectorExpression>(SymVst.FindExpression(Expr::MakeId(EAX, pX86Disasm->GetCpuInformation())));
-  BOOST_REQUIRE(spRes != nullptr);
+  auto spRes = expr_cast<BitVectorExpression>(SymVst.GetValue(Expr::MakeId(EAX, pX86Disasm->GetCpuInformation())));
+  REQUIRE(spRes != nullptr);
   std::cout << "res: " << spRes->ToString() << std::endl;
-  BOOST_REQUIRE(spRes->GetInt().ConvertTo<u32>() == 0x000000EE);
+  REQUIRE(spRes->GetInt().ConvertTo<u32>() == 0x000000EE);
 
   delete pX86Disasm;
 }
 
-BOOST_AUTO_TEST_CASE(expr_var)
+TEST_CASE("variable", "[expr]")
 {
   auto spAllocVarExpr = Expr::MakeVar("test", VariableExpression::Alloc, 32);
   auto spAssignVarExpr = Expr::MakeAssign(Expr::MakeVar("test", VariableExpression::Use), Expr::MakeBitVector(32, 0x11223344));
@@ -170,30 +209,30 @@ BOOST_AUTO_TEST_CASE(expr_var)
   std::cout << spFreeVarExpr->ToString() << std::endl;
 }
 
-BOOST_AUTO_TEST_CASE(expr_flt)
+TEST_CASE("float", "[expr]")
 {
   using namespace Pattern;
 
   ExpressionFilter ExprFlt(OR(Any("a"), Any("b")));
   auto spOrExpr = Expr::MakeBinOp(OperationExpression::OpOr, Expr::MakeBitVector(BitVector(32, 0x11223344)), Expr::MakeBitVector(BitVector(32, 0xaabbccdd)));
-  BOOST_REQUIRE(ExprFlt.Execute(spOrExpr));
+  REQUIRE(ExprFlt.Execute(spOrExpr));
   auto spExprA = expr_cast<BitVectorExpression>(ExprFlt.GetExpression("a"));
-  BOOST_REQUIRE(spExprA != nullptr);
-  BOOST_REQUIRE(spExprA->GetInt().ConvertTo<u32>() == 0x11223344);
+  REQUIRE(spExprA != nullptr);
+  REQUIRE(spExprA->GetInt().ConvertTo<u32>() == 0x11223344);
   auto spExprB = expr_cast<BitVectorExpression>(ExprFlt.GetExpression("b"));
-  BOOST_REQUIRE(spExprB != nullptr);
-  BOOST_REQUIRE(spExprB->GetInt().ConvertTo<u32>() == 0xaabbccdd);
+  REQUIRE(spExprB != nullptr);
+  REQUIRE(spExprB->GetInt().ConvertTo<u32>() == 0xaabbccdd);
 }
 
-BOOST_AUTO_TEST_CASE(expr_push_pop)
+TEST_CASE("push pop", "[expr]")
 {
   auto& rModMgr = ModuleManager::Instance();
   auto pX86Getter = rModMgr.LoadModule<TGetArchitecture>(".", "x86");
-  BOOST_REQUIRE(pX86Getter != nullptr);
+  REQUIRE(pX86Getter != nullptr);
   auto pX86Disasm = pX86Getter();
 
   auto const X86_32_Mode = pX86Disasm->GetModeByName("32-bit");
-  BOOST_REQUIRE(X86_32_Mode != 0);
+  REQUIRE(X86_32_Mode != 0);
 
   auto const pCpuInfo = pX86Disasm->GetCpuInformation();
   auto SS = pCpuInfo->ConvertNameToIdentifier("ss");
@@ -242,28 +281,28 @@ BOOST_AUTO_TEST_CASE(expr_push_pop)
 
   SymbolicVisitor SymVst(Document(), X86_32_Mode);
 
-  SymVst.UpdateAddress(*pX86Disasm, Address(Address::FlatType, 0x0, 0x0, 16, 32));
+  SymVst.UpdateAddress(*pX86Disasm, Address(Address::LinearType, 0x0, 0x0, 16, 32));
   for (auto const& rspExpr : PushFF)
   {
     rspExpr->Visit(&SymVst);
   }
 
-  SymVst.UpdateAddress(*pX86Disasm, Address(Address::FlatType, 0x0, 0x2, 16, 32));
+  SymVst.UpdateAddress(*pX86Disasm, Address(Address::LinearType, 0x0, 0x2, 16, 32));
   for (auto const& rspExpr : PopEax)
   {
     rspExpr->Visit(&SymVst);
   }
 
   // Result must be EAX = 0xFFFFFFFF
-  auto spRes = expr_cast<BitVectorExpression>(SymVst.FindExpression(Expr::MakeId(EAX, pX86Disasm->GetCpuInformation())));
+  auto spRes = expr_cast<BitVectorExpression>(SymVst.GetValue(Expr::MakeId(EAX, pX86Disasm->GetCpuInformation())));
 
-  BOOST_REQUIRE(spRes != nullptr);
-  BOOST_REQUIRE(spRes->GetInt().ConvertTo<u32>() == 0xFFFFFFFF);
+  REQUIRE(spRes != nullptr);
+  REQUIRE(spRes->GetInt().ConvertTo<u32>() == 0xFFFFFFFF);
 
   delete pX86Disasm;
 }
 
-BOOST_AUTO_TEST_CASE(expr_x86_call_reg)
+TEST_CASE("x86 call register", "[expr]")
 {
   using namespace medusa;
 
@@ -272,7 +311,7 @@ BOOST_AUTO_TEST_CASE(expr_x86_call_reg)
     std::cout << rMsg << std::flush;
   });
 
-  BOOST_TEST_MESSAGE("Using samples path \"" SAMPLES_DIR "\"");
+  INFO("Using samples path \"" SAMPLES_DIR "\"");
 
   Medusa Core;
 
@@ -282,7 +321,7 @@ BOOST_AUTO_TEST_CASE(expr_x86_call_reg)
   try
   {
     auto spFileBinStrm = std::make_shared<FileBinaryStream>(pSample);
-    BOOST_REQUIRE(Core.NewDocument(
+    REQUIRE(Core.NewDocument(
       spFileBinStrm, true,
       [&](Path& rDbPath, std::list<Medusa::Filter> const&)
     {
@@ -293,7 +332,7 @@ BOOST_AUTO_TEST_CASE(expr_x86_call_reg)
   catch (Exception const& e)
   {
     std::cerr << e.What() << std::endl;
-    BOOST_REQUIRE(0);
+    REQUIRE(0);
   }
 
   Core.WaitForTasks();
@@ -303,15 +342,15 @@ BOOST_AUTO_TEST_CASE(expr_x86_call_reg)
   auto spStartCell = rDoc.GetCell(rStartAddr);
 
   auto spArch = ModuleManager::Instance().GetArchitecture(spStartCell->GetArchitectureTag());
-  BOOST_REQUIRE(spArch != nullptr);
+  REQUIRE(spArch != nullptr);
 
   SymbolicVisitor SymVst(Core.GetDocument(), spStartCell->GetMode());
 
   auto SymExec = [&](Address const& rAddr)
   {
-    BOOST_REQUIRE(SymVst.UpdateAddress(*spArch, rAddr));
-    auto spInsn = std::dynamic_pointer_cast<Instruction>(Core.GetCell(rAddr));
-    BOOST_REQUIRE(spInsn != nullptr);
+    REQUIRE(SymVst.UpdateAddress(*spArch, rAddr));
+    auto spInsn = std::dynamic_pointer_cast<Instruction>(rDoc.GetCell(rAddr));
+    REQUIRE(spInsn != nullptr);
     for (auto const& rspExpr : spInsn->GetSemantic())
     {
       rspExpr->Visit(&SymVst);
@@ -321,8 +360,8 @@ BOOST_AUTO_TEST_CASE(expr_x86_call_reg)
   auto pCpuInfo = spArch->GetCpuInformation();
   auto EIP = pCpuInfo->ConvertNameToIdentifier("eip");
   auto EAX = pCpuInfo->ConvertNameToIdentifier("eax");
-  BOOST_REQUIRE(EIP != 0);
-  BOOST_REQUIRE(EAX != 0);
+  REQUIRE(EIP != 0);
+  REQUIRE(EAX != 0);
 
   std::vector<Address> Addrs =
   {
@@ -361,14 +400,14 @@ BOOST_AUTO_TEST_CASE(expr_x86_call_reg)
     });
 
     //auto spExpr = SymVst.FindExpression(Expr::MakeId(EIP, pCpuInfo));
-    //BOOST_REQUIRE(spExpr != nullptr);
+    //REQUIRE(spExpr != nullptr);
     //std::cout << spExpr->ToString() << std::endl;
   }
 
   std::cout << SymVst.ToString() << std::endl;
 }
 
-BOOST_AUTO_TEST_CASE(expr_x86_jmp_tbl)
+TEST_CASE("x86 jump table", "[expr]")
 {
   using namespace medusa;
 
@@ -377,7 +416,7 @@ BOOST_AUTO_TEST_CASE(expr_x86_jmp_tbl)
     std::cout << rMsg << std::flush;
   });
 
-  BOOST_TEST_MESSAGE("Using samples path \"" SAMPLES_DIR "\"");
+  INFO("Using samples path \"" SAMPLES_DIR "\"");
 
   Medusa Core;
 
@@ -387,7 +426,7 @@ BOOST_AUTO_TEST_CASE(expr_x86_jmp_tbl)
   try
   {
     auto spFileBinStrm = std::make_shared<FileBinaryStream>(pSample);
-    BOOST_REQUIRE(Core.NewDocument(
+    REQUIRE(Core.NewDocument(
       spFileBinStrm, true,
       [&](Path& rDbPath, std::list<Medusa::Filter> const&)
     {
@@ -398,29 +437,33 @@ BOOST_AUTO_TEST_CASE(expr_x86_jmp_tbl)
   catch (Exception const& e)
   {
     std::cerr << e.What() << std::endl;
-    BOOST_REQUIRE(0);
+    REQUIRE(0);
   }
 
   auto& rDoc = Core.GetDocument();
 
-  BOOST_REQUIRE(Core.AddTask("symbolic disassemble", rDoc.MakeAddress(0x0000, 0x00401000)));
+  auto FuncAddr = rDoc.MakeAddress(0x0000, 0x00401000);
+  REQUIRE(Core.AddTask("symbolic disassemble", FuncAddr));
 
   Core.WaitForTasks();
+
+  auto spFunc = rDoc.GetMultiCell(FuncAddr);
+  REQUIRE(spFunc != nullptr);
+
+  auto spFuncGraph = spFunc->GetGraph();
+  REQUIRE(spFuncGraph != nullptr);
+
+  GraphData GD;
+  REQUIRE(Core.FormatGraph(*spFuncGraph, GD));
 }
 
-//BOOST_AUTO_TEST_CASE(expr_tostr)
-//{
-//  Expression::SPType spExpr;
-//  Expression::SPType spLastExpr;
-//  for (auto i = 0UL; i < 0x11; ++i)
-//  {
-//    if (spLastExpr != nullptr)
-//      spExpr = Expr::MakeBinOp(OperationExpression::OpAdd, spExpr, spLastExpr);
-//    else
-//      spExpr = Expr::MakeBinOp(OperationExpression::OpAdd, Expr::MakeBitVector(BitVector(0x8, 0x00)), Expr::MakeBitVector(BitVector(0x8, 0x00)));
-//    spLastExpr = spExpr;
-//  }
-//  std::cout << spExpr->ToString() << std::endl;
-//}
+TEST_CASE("operator", "[expr]")
+{
+  auto spFlt = Expr::MakeBitVector(BitVector(1.0f));
+  auto spImm = Expr::MakeBitVector(BitVector(32, 0x3f800000)); // 1.0
 
-BOOST_AUTO_TEST_SUITE_END()
+  auto spRes = spFlt + spImm;
+
+  REQUIRE(spRes != nullptr);
+  std::cout << spRes->ToString() << std::endl;
+}

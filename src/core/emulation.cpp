@@ -94,7 +94,7 @@ Emulator::ReturnType Emulator::Execute(Address const& rAddress)
   return Execute(Exprs);
 }
 
-bool Emulator::AddHook(Address const& rAddress, u32 Type, HookCallback Callback)
+bool Emulator::AddHook(Address const& rAddress, Emulator::HookType Type, HookCallback Callback)
 {
   auto itHook = m_Hooks.find(rAddress);
   if (itHook != std::end(m_Hooks))
@@ -114,7 +114,7 @@ bool Emulator::AddHookOnInstruction(HookCallback InsnCb)
   return true;
 }
 
-bool Emulator::AddHook(Document const& rDoc, std::string const& rLabelName, u32 Type, HookCallback Callback)
+bool Emulator::AddHook(Document const& rDoc, std::string const& rLabelName, Emulator::HookType Type, HookCallback Callback)
 {
   auto Addr = rDoc.GetAddressFromLabelName(rLabelName);
   return AddHook(Addr, Type, Callback);
@@ -177,7 +177,7 @@ bool Emulator::_Disassemble(Address const& rAddress, DisasmCbType Cb)
     // To disassemble instruction, we need both a binary stream and offset
     BinaryStream::SPType spBinStrm;
     u32 Off;
-    u32 Flags;
+    MemoryArea::Access Flags;
     if (!m_pMemCtxt->FindMemory(LinAddr, spBinStrm, Off, Flags))
     {
       Log::Write("core").Level(LogError) << "unable to find memory for: " << InsnAddr << ", linear address: " << LinAddr << LogEnd;
@@ -208,7 +208,7 @@ bool Emulator::_Disassemble(Address const& rAddress, DisasmCbType Cb)
       break;
 
     // Go to the next instruction
-    InsnAddr += spCurInsn->GetLength();
+    InsnAddr += spCurInsn->GetSize();
   }
 
   return true;

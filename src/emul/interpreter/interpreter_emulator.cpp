@@ -503,7 +503,7 @@ Expression::SPType InterpreterEmulator::InterpreterExpressionVisitor::VisitVaria
   {
   case Unknown:
   {
-    switch (spVarExpr->GetAction())
+    switch (spVarExpr->GetType())
     {
     case VariableExpression::Alloc:
       m_rVars[spVarExpr->GetName()] = BitVector();
@@ -521,7 +521,7 @@ Expression::SPType InterpreterEmulator::InterpreterExpressionVisitor::VisitVaria
   }
 
   case Read:
-    if (spVarExpr->GetAction() == VariableExpression::Use)
+    if (spVarExpr->GetType() == VariableExpression::Use)
     {
       auto itVar = m_rVars.find(spVarExpr->GetName());
       if (itVar == std::end(m_rVars))
@@ -536,7 +536,7 @@ Expression::SPType InterpreterEmulator::InterpreterExpressionVisitor::VisitVaria
     }
 
   case Write:
-    if (spVarExpr->GetAction() == VariableExpression::Use)
+    if (spVarExpr->GetType() == VariableExpression::Use)
     {
       auto itVar = m_rVars.find(spVarExpr->GetName());
       if (itVar == std::end(m_rVars))
@@ -571,7 +571,7 @@ Expression::SPType InterpreterEmulator::InterpreterExpressionVisitor::VisitMemor
     return nullptr;
   }
 
-  TBase Base = 0;
+  BaseType Base = 0;
   if (spBaseExpr != nullptr)
   {
     if (m_Values.size() < 2)
@@ -588,7 +588,7 @@ Expression::SPType InterpreterEmulator::InterpreterExpressionVisitor::VisitMemor
     Log::Write("emul_interpreter").Level(LogError) << "no value for address offset" << LogEnd;
     return nullptr;
   }
-  TOffset Offset = m_Values.back().ConvertTo<TOffset>();
+  OffsetType Offset = m_Values.back().ConvertTo<OffsetType>();
   m_Values.pop_back();
 
   Address Addr(Base, Offset);

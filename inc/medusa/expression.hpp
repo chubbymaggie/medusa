@@ -17,7 +17,7 @@ class ExpressionVisitor;
 // TODO: add Track.{h,c}pp
 namespace Track
 {
-  class Medusa_EXPORT Context
+  class MEDUSA_EXPORT Context
   {
   public:
     void TrackId(u32 Id, Address const& rCurAddr);
@@ -30,7 +30,7 @@ namespace Track
 
   typedef std::tuple<u32, Address> Id;
 
-  class Medusa_EXPORT BackTrackContext
+  class MEDUSA_EXPORT BackTrackContext
   {
   public:
     void TrackId(Track::Id const& rId) { m_Ids.insert(rId); }
@@ -45,7 +45,7 @@ namespace Track
 
 // expression /////////////////////////////////////////////////////////////////
 
-class Medusa_EXPORT Expression : public std::enable_shared_from_this<Expression>
+class MEDUSA_EXPORT Expression : public std::enable_shared_from_this<Expression>
 {
 public:
   typedef std::shared_ptr<Expression> SPType;
@@ -86,6 +86,8 @@ public:
 
   virtual ~Expression(void) {}
 
+  static Expression::VSPType Parse(std::string const& rExpressions, CpuInformation const& rCpuInfo, u8 Mode);
+
   virtual std::string ToString(void) const = 0;
   virtual Expression::SPType Clone(void) const = 0;
   virtual u32 GetBitSize(void) const = 0;
@@ -124,9 +126,53 @@ typename T::SPType expr_cast(Expression::SPType spExpr)
   static  Kind GetStaticClassKind(void) { return EXPR_KIND; }\
   virtual bool IsKindOf(Kind ExprKind) const { return ExprKind == EXPR_KIND || BASE_EXPR_NAME::IsKindOf(ExprKind); }
 
+
+// unary operations
+/// src: http://en.cppreference.com/w/cpp/language/operator_incdec
+MEDUSA_EXPORT Expression::SPType operator++(Expression::SPType spExpr);
+MEDUSA_EXPORT Expression::SPType operator++(Expression::SPType spExpr, int);
+MEDUSA_EXPORT Expression::SPType operator--(Expression::SPType spExpr);
+MEDUSA_EXPORT Expression::SPType operator--(Expression::SPType spExpr, int);
+
+MEDUSA_EXPORT Expression::SPType operator~(Expression::SPType const spExpr);
+MEDUSA_EXPORT Expression::SPType operator-(Expression::SPType const spExpr);
+
+// binary operations
+MEDUSA_EXPORT Expression::SPType operator&(Expression::SPType const spLeftExpr, Expression::SPType const spRightExpr);
+MEDUSA_EXPORT Expression::SPType operator|(Expression::SPType const spLeftExpr, Expression::SPType const spRightExpr);
+MEDUSA_EXPORT Expression::SPType operator^(Expression::SPType const spLeftExpr, Expression::SPType const spRightExpr);
+
+MEDUSA_EXPORT Expression::SPType operator+(Expression::SPType const spLeftExpr, Expression::SPType const spRightExpr);
+MEDUSA_EXPORT Expression::SPType operator-(Expression::SPType const spLeftExpr, Expression::SPType const spRightExpr);
+MEDUSA_EXPORT Expression::SPType operator*(Expression::SPType const spLeftExpr, Expression::SPType const spRightExpr);
+MEDUSA_EXPORT Expression::SPType operator/(Expression::SPType const spLeftExpr, Expression::SPType const spRightExpr);
+MEDUSA_EXPORT Expression::SPType SDIV     (Expression::SPType const spLeftExpr, Expression::SPType const spRightExpr);
+MEDUSA_EXPORT Expression::SPType operator%(Expression::SPType const spLeftExpr, Expression::SPType const spRightExpr);
+MEDUSA_EXPORT Expression::SPType SREM     (Expression::SPType const spLeftExpr, Expression::SPType const spRightExpr);
+
+MEDUSA_EXPORT Expression::SPType operator<<(Expression::SPType const spLeftExpr, Expression::SPType const spRightExpr);
+MEDUSA_EXPORT Expression::SPType operator>>(Expression::SPType const spLeftExpr, Expression::SPType const spRightExpr);
+MEDUSA_EXPORT Expression::SPType ARS       (Expression::SPType const spLeftExpr, Expression::SPType const spRightExpr);
+
+MEDUSA_EXPORT Expression::SPType operator&(Expression::SPType const spLeftExpr, u32 RightVal);
+MEDUSA_EXPORT Expression::SPType operator|(Expression::SPType const spLeftExpr, u32 RightVal);
+MEDUSA_EXPORT Expression::SPType operator^(Expression::SPType const spLeftExpr, u32 RightVal);
+
+MEDUSA_EXPORT Expression::SPType operator+(Expression::SPType const spLeftExpr, u32 RightVal);
+MEDUSA_EXPORT Expression::SPType operator-(Expression::SPType const spLeftExpr, u32 RightVal);
+MEDUSA_EXPORT Expression::SPType operator*(Expression::SPType const spLeftExpr, u32 RightVal);
+MEDUSA_EXPORT Expression::SPType operator/(Expression::SPType const spLeftExpr, u32 RightVal);
+MEDUSA_EXPORT Expression::SPType SDIV     (Expression::SPType const spLeftExpr, u32 RightVal);
+MEDUSA_EXPORT Expression::SPType operator%(Expression::SPType const spLeftExpr, u32 RightVal);
+MEDUSA_EXPORT Expression::SPType SREM     (Expression::SPType const spLeftExpr, u32 RightVal);
+
+MEDUSA_EXPORT Expression::SPType operator<<(Expression::SPType const spLeftExpr, u32 RightVal);
+MEDUSA_EXPORT Expression::SPType operator>>(Expression::SPType const spLeftExpr, u32 RightVal);
+MEDUSA_EXPORT Expression::SPType ARS       (Expression::SPType const spLeftExpr, u32 RightVal);
+
 // system expression //////////////////////////////////////////////////////////
 
-class Medusa_EXPORT SystemExpression : public Expression
+class MEDUSA_EXPORT SystemExpression : public Expression
 {
   DECL_EXPR(SystemExpression, Expression::Sys, Expression)
 
@@ -151,7 +197,7 @@ protected:
 
 // bind expression ////////////////////////////////////////////////////////////
 
-class Medusa_EXPORT BindExpression : public Expression
+class MEDUSA_EXPORT BindExpression : public Expression
 {
   DECL_EXPR(BindExpression, Expression::Bind, Expression)
 
@@ -174,7 +220,7 @@ private:
 
 // condition expression ///////////////////////////////////////////////////////
 
-class Medusa_EXPORT ConditionExpression : public Expression
+class MEDUSA_EXPORT ConditionExpression : public Expression
 {
 public:
   typedef std::shared_ptr<ConditionExpression> SPType;
@@ -217,7 +263,7 @@ protected:
   Expression::SPType m_spTestExpr;
 };
 
-class Medusa_EXPORT TernaryConditionExpression : public ConditionExpression
+class MEDUSA_EXPORT TernaryConditionExpression : public ConditionExpression
 {
   DECL_EXPR(TernaryConditionExpression, Expression::TernaryCond, Expression)
 
@@ -240,7 +286,7 @@ protected:
   Expression::SPType m_spFalseExpr;
 };
 
-class Medusa_EXPORT IfElseConditionExpression : public ConditionExpression
+class MEDUSA_EXPORT IfElseConditionExpression : public ConditionExpression
 {
   DECL_EXPR(IfElseConditionExpression, Expression::IfElseCond, Expression)
 
@@ -263,7 +309,7 @@ protected:
   Expression::SPType m_spElseExpr;
 };
 
-class Medusa_EXPORT WhileConditionExpression : public ConditionExpression
+class MEDUSA_EXPORT WhileConditionExpression : public ConditionExpression
 {
   DECL_EXPR(WhileConditionExpression, Expression::WhileCond, Expression)
 
@@ -286,7 +332,7 @@ protected:
 
 // operation expression ///////////////////////////////////////////////////////
 
-class Medusa_EXPORT AssignmentExpression : public Expression
+class MEDUSA_EXPORT AssignmentExpression : public Expression
 {
   DECL_EXPR(AssignmentExpression, Expression::Assign, Expression)
 
@@ -296,7 +342,7 @@ public:
 
   virtual std::string ToString(void) const;
   virtual Expression::SPType Clone(void) const;
-  virtual u32 GetBitSize(void) const { return 0; }
+  virtual u32 GetBitSize(void) const;
   virtual Expression::SPType Visit(ExpressionVisitor* pVisitor);
   virtual bool UpdateChild(Expression::SPType spOldExpr, Expression::SPType spNewExpr);
   virtual CompareType Compare(Expression::SPType spExpr) const;
@@ -309,7 +355,7 @@ private:
   Expression::SPType m_spSrcExpr;
 };
 
-class Medusa_EXPORT OperationExpression : public Expression
+class MEDUSA_EXPORT OperationExpression : public Expression
 {
   DECL_EXPR(OperationExpression, Expression::Op, Expression)
 
@@ -369,14 +415,14 @@ public:
   virtual bool UpdateChild(Expression::SPType spOldExpr, Expression::SPType spNewExpr) { return false; }
   virtual CompareType Compare(Expression::SPType spExpr) const;
 
-  u8 GetOperation(void) const { return m_OpType; }
-  u8 GetOppositeOperation(void) const;
+  Type GetOperation(void) const;
+  Type GetOppositeOperation(void) const;
 
 protected:
-  u8 m_OpType;
+  Type m_OpType;
 };
 
-class Medusa_EXPORT UnaryOperationExpression : public OperationExpression
+class MEDUSA_EXPORT UnaryOperationExpression : public OperationExpression
 {
   DECL_EXPR(UnaryOperationExpression, Expression::UnOp, Expression)
 
@@ -397,7 +443,7 @@ private:
   Expression::SPType m_spExpr;
 };
 
-class Medusa_EXPORT BinaryOperationExpression : public OperationExpression
+class MEDUSA_EXPORT BinaryOperationExpression : public OperationExpression
 {
   DECL_EXPR(BinaryOperationExpression, Expression::BinOp, Expression)
 
@@ -427,7 +473,7 @@ private:
 
 // constant expression ////////////////////////////////////////////////////////
 
-class Medusa_EXPORT BitVectorExpression : public Expression
+class MEDUSA_EXPORT BitVectorExpression : public Expression
 {
   DECL_EXPR(BitVectorExpression, Expression::Const, Expression)
 
@@ -453,7 +499,7 @@ private:
   BitVector m_Value;
 };
 
-// class Medusa_EXPORT IntegerExpression : public BitVectorExpression
+// class MEDUSA_EXPORT IntegerExpression : public BitVectorExpression
 // {
 //   DECL_EXPR(IntegerExpression, Expression::IntConst, Expression)
 
@@ -479,7 +525,7 @@ private:
 //   BitVector m_Value;
 // };
 
-// class Medusa_EXPORT FloatingPointExpression : public BitVectorExpression
+// class MEDUSA_EXPORT FloatingPointExpression : public BitVectorExpression
 // {
 //   DECL_EXPR(FloatingPointExpression, Expression::FloatConst, Expression)
 
@@ -524,7 +570,7 @@ private:
 
 // identifier expression //////////////////////////////////////////////////////
 
-class Medusa_EXPORT IdentifierExpression : public Expression
+class MEDUSA_EXPORT IdentifierExpression : public Expression
 {
   DECL_EXPR(IdentifierExpression, Expression::Id, Expression)
 
@@ -552,7 +598,7 @@ protected:
   CpuInformation const* m_pCpuInfo;
 };
 
-class Medusa_EXPORT VectorIdentifierExpression : public Expression
+class MEDUSA_EXPORT VectorIdentifierExpression : public Expression
 {
   DECL_EXPR(VectorIdentifierExpression, Expression::VecId, Expression);
 
@@ -581,7 +627,7 @@ protected:
   CpuInformation const* m_pCpuInfo;
 };
 
-class Medusa_EXPORT TrackExpression : public Expression
+class MEDUSA_EXPORT TrackExpression : public Expression
 {
   DECL_EXPR(TrackExpression, Expression::Track, Expression)
 
@@ -609,12 +655,12 @@ private:
 
 // variable ///////////////////////////////////////////////////////////////////
 
-class Medusa_EXPORT VariableExpression : public Expression
+class MEDUSA_EXPORT VariableExpression : public Expression
 {
   DECL_EXPR(VariableExpression, Expression::Var, Expression)
 
 public:
-  enum ActionType
+  enum Type
   {
     Unknown,
     Alloc,
@@ -622,7 +668,7 @@ public:
     Use,
   };
 
-  VariableExpression(std::string const& rVarName, ActionType VarType, u32 BitSize = 0);
+  VariableExpression(std::string const& rVarName, Type VarType, u32 BitSize = 0);
 
   virtual ~VariableExpression(void);
 
@@ -634,19 +680,19 @@ public:
   virtual CompareType Compare(Expression::SPType spExpr) const;
 
   std::string const& GetName(void) const { return m_Name; }
-  ActionType         GetAction(void) const { return m_Action; }
+  Type               GetType(void) const { return m_VarType; }
 
   void SetBitSize(u32 BitSize) { m_BitSize = BitSize; }
 
 protected:
   std::string m_Name;
-  ActionType m_Action;
-  u32 m_BitSize;
+  Type        m_VarType;
+  u32         m_BitSize;
 };
 
 // memory expression //////////////////////////////////////////////////////////
 
-class Medusa_EXPORT MemoryExpression : public Expression
+class MEDUSA_EXPORT MemoryExpression : public Expression
 {
   DECL_EXPR(MemoryExpression, Expression::Mem, Expression)
 
@@ -673,7 +719,6 @@ public:
 
   Expression::SPType GetAddressExpression(void) const { return m_spOffExpr; }
   bool IsDereferencable(void) const { return m_Dereference; }
-
 private:
   u32 m_AccessSizeInBit;
   Expression::SPType m_spBaseExpr;
@@ -683,7 +728,7 @@ private:
 
 // symbolic expression ////////////////////////////////////////////////////////
 
-class Medusa_EXPORT SymbolicExpression : public Expression
+class MEDUSA_EXPORT SymbolicExpression : public Expression
 {
   DECL_EXPR(SymbolicExpression, Expression::Sym, Expression)
 
@@ -723,7 +768,7 @@ private:
 
 // visitor ////////////////////////////////////////////////////////////////////
 
-class Medusa_EXPORT ExpressionVisitor
+class MEDUSA_EXPORT ExpressionVisitor
 {
 public:
   virtual Expression::SPType VisitSystem(SystemExpression::SPType spSysExpr);
@@ -748,30 +793,30 @@ public:
 
 namespace Expr
 {
-  Medusa_EXPORT Expression::SPType MakeBitVector(BitVector const& rValue);
-  Medusa_EXPORT Expression::SPType MakeBitVector(u16 BitSize, ap_int Value);
-  Medusa_EXPORT Expression::SPType MakeBoolean(bool Value);
-  Medusa_EXPORT Expression::SPType MakeId(u32 Id, CpuInformation const* pCpuInfo);
-  Medusa_EXPORT Expression::SPType MakeVecId(std::vector<u32> const& rVecId, CpuInformation const* pCpuInfo);
-  Medusa_EXPORT Expression::SPType MakeTrack(Expression::SPType spTrkExpr, Address const& rCurAddr, u8 Pos);
-  Medusa_EXPORT Expression::SPType MakeMem(u32 AccessSize, Expression::SPType spExprBase, Expression::SPType spExprOffset, bool Dereference = true);
-  Medusa_EXPORT Expression::SPType MakeVar(std::string const& rName, VariableExpression::ActionType Act, u16 BitSize = 0);
+  MEDUSA_EXPORT Expression::SPType MakeBitVector(BitVector const& rValue);
+  MEDUSA_EXPORT Expression::SPType MakeBitVector(u16 BitSize, ap_int Value);
+  MEDUSA_EXPORT Expression::SPType MakeBoolean(bool Value);
+  MEDUSA_EXPORT Expression::SPType MakeId(u32 Id, CpuInformation const* pCpuInfo);
+  MEDUSA_EXPORT Expression::SPType MakeVecId(std::vector<u32> const& rVecId, CpuInformation const* pCpuInfo);
+  MEDUSA_EXPORT Expression::SPType MakeTrack(Expression::SPType spTrkExpr, Address const& rCurAddr, u8 Pos);
+  MEDUSA_EXPORT Expression::SPType MakeMem(u32 AccessSize, Expression::SPType spExprBase, Expression::SPType spExprOffset, bool Dereference = true);
+  MEDUSA_EXPORT Expression::SPType MakeVar(std::string const& rName, VariableExpression::Type VarType, u16 BitSize = 0);
 
-  Medusa_EXPORT Expression::SPType MakeCond(ConditionExpression::Type CondType, Expression::SPType spRefExpr, Expression::SPType spTestExpr);
-  Medusa_EXPORT Expression::SPType MakeTernaryCond(ConditionExpression::Type CondType, Expression::SPType spRefExpr, Expression::SPType spTestExpr, Expression::SPType spTrueExpr, Expression::SPType spFalseExpr);
-  Medusa_EXPORT Expression::SPType MakeIfElseCond(ConditionExpression::Type CondType, Expression::SPType spRefExpr, Expression::SPType spTestExpr, Expression::SPType spThenExpr, Expression::SPType spElseExpr);
-  Medusa_EXPORT Expression::SPType MakeWhileCond(ConditionExpression::Type CondType, Expression::SPType spRefExpr, Expression::SPType spTestExpr, Expression::SPType spBodyExpr);
+  MEDUSA_EXPORT Expression::SPType MakeCond(ConditionExpression::Type CondType, Expression::SPType spRefExpr, Expression::SPType spTestExpr);
+  MEDUSA_EXPORT Expression::SPType MakeTernaryCond(ConditionExpression::Type CondType, Expression::SPType spRefExpr, Expression::SPType spTestExpr, Expression::SPType spTrueExpr, Expression::SPType spFalseExpr);
+  MEDUSA_EXPORT Expression::SPType MakeIfElseCond(ConditionExpression::Type CondType, Expression::SPType spRefExpr, Expression::SPType spTestExpr, Expression::SPType spThenExpr, Expression::SPType spElseExpr);
+  MEDUSA_EXPORT Expression::SPType MakeWhileCond(ConditionExpression::Type CondType, Expression::SPType spRefExpr, Expression::SPType spTestExpr, Expression::SPType spBodyExpr);
 
-  Medusa_EXPORT Expression::SPType MakeAssign(Expression::SPType spDstExpr, Expression::SPType spSrcExpr);
-  Medusa_EXPORT Expression::SPType MakeUnOp(OperationExpression::Type OpType, Expression::SPType spExpr);
-  Medusa_EXPORT Expression::SPType MakeBinOp(OperationExpression::Type OpType, Expression::SPType spLeftExpr, Expression::SPType spRightExpr);
+  MEDUSA_EXPORT Expression::SPType MakeAssign(Expression::SPType spDstExpr, Expression::SPType spSrcExpr);
+  MEDUSA_EXPORT Expression::SPType MakeUnOp(OperationExpression::Type OpType, Expression::SPType spExpr);
+  MEDUSA_EXPORT Expression::SPType MakeBinOp(OperationExpression::Type OpType, Expression::SPType spLeftExpr, Expression::SPType spRightExpr);
 
-  Medusa_EXPORT Expression::SPType MakeBind(Expression::LSPType const& rExprs);
+  MEDUSA_EXPORT Expression::SPType MakeBind(Expression::LSPType const& rExprs);
 
-  Medusa_EXPORT Expression::SPType MakeSym(SymbolicExpression::Type SymType, std::string const& rValue, Address const& rAddr, Expression::SPType spExpr = nullptr);
-  Medusa_EXPORT Expression::SPType MakeSys(std::string const& rName, Address const& rAddr);
+  MEDUSA_EXPORT Expression::SPType MakeSym(SymbolicExpression::Type SymType, std::string const& rValue, Address const& rAddr, Expression::SPType spExpr = nullptr);
+  MEDUSA_EXPORT Expression::SPType MakeSys(std::string const& rName, Address const& rAddr);
 
-  Medusa_EXPORT bool TestKind(Expression::Kind Kind, Expression::SPType spExpr);
+  MEDUSA_EXPORT bool TestKind(Expression::Kind Kind, Expression::SPType spExpr);
 }
 
 

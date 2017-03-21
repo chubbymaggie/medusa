@@ -16,7 +16,7 @@
 
 MEDUSA_NAMESPACE_BEGIN
 
-class Medusa_EXPORT Emulator
+class MEDUSA_EXPORT Emulator
 {
 public:
   typedef std::shared_ptr<Emulator> SPType;
@@ -76,8 +76,8 @@ public:
   typedef std::function<ReturnType(CpuContext*, MemoryContext*, Address const&)> HookCallback;
 
   virtual bool AddHookOnInstruction(HookCallback InsnCb);
-  virtual bool AddHook(Address const& rAddress, u32 Type, HookCallback Callback);
-  virtual bool AddHook(Document const& rDoc, std::string const& rLabelName, u32 Type, HookCallback Callback);
+  virtual bool AddHook(Address const& rAddress, Emulator::HookType Type, HookCallback Callback);
+  virtual bool AddHook(Document const& rDoc, std::string const& rLabelName, Emulator::HookType Type, HookCallback Callback);
   virtual bool RemoveHook(Address const& rAddress);
   virtual ReturnType CallInstructionHook(void);
   virtual ReturnType CallHookOnExecutionIfNeeded(Address const& rAddress) const;
